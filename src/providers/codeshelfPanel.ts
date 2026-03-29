@@ -95,8 +95,36 @@ export class CodeShelfPanel {
         await this.scan();
         break;
       }
+      case 'project:editManifest': {
+        const manifestPath = vscode.Uri.file(
+          require('path').join(msg.path, '.codeshelf.json'),
+        );
+        try {
+          await vscode.workspace.fs.stat(manifestPath);
+        } catch {
+          // Create default manifest if it doesn't exist
+          const defaultManifest = JSON.stringify({
+            name: require('path').basename(msg.path),
+            description: '',
+            poster: '',
+            tags: [],
+          }, null, 2) + '\n';
+          await vscode.workspace.fs.writeFile(manifestPath, Buffer.from(defaultManifest));
+        }
+        await vscode.commands.executeCommand('vscode.open', manifestPath);
+        break;
+      }
+      case 'settings:openConfig': {
+        await vscode.commands.executeCommand(
+          'workbench.action.openSettings',
+          'codeshelf',
+        );
+        break;
+      }
     }
   }
+
+  private static readonly CACHE_KEY = 'codeshelf.cachedShelves';
 
   private async onReady() {
     const config = vscode.workspace.getConfiguration('codeshelf');
@@ -104,6 +132,12 @@ export class CodeShelfPanel {
     this.postMessage({ type: 'settings:state', hasRoots: roots.length > 0 });
 
     if (roots.length > 0) {
+      // Show cached data immediately if available
+      const cached = this.context.globalState.get<Shelf[]>(CodeShelfPanel.CACHE_KEY);
+      if (cached && cached.length > 0) {
+        this.postMessage({ type: 'projects:loaded', shelves: cached });
+      }
+      // Then rescan in background and update
       await this.scan();
     }
   }
@@ -114,8 +148,14 @@ export class CodeShelfPanel {
     const hidden = config.get<string[]>('hidden', []);
     const depth = config.get<number>('scanDepth', 3);
 
-    this.postMessage({ type: 'projects:scanning', scanning: true });
+    // Only show scanning indicator if we have no cached data
+    const cached = this.context.globalState.get<Shelf[]>(CodeShelfPanel.CACHE_KEY);
+    if (!cached || cached.length === 0) {
+      this.postMessage({ type: 'projects:scanning', scanning: true });
+    }
+
     const shelves: Shelf[] = await scanRoots(roots, hidden, depth);
+    await this.context.globalState.update(CodeShelfPanel.CACHE_KEY, shelves);
     this.postMessage({ type: 'projects:scanning', scanning: false });
     this.postMessage({ type: 'projects:loaded', shelves });
   }
@@ -161,7 +201,10 @@ export class CodeShelfPanel {
       <header class="shelf-header">
         <h1 class="shelf-logo">CodeShelf</h1>
         <div class="shelf-controls">
-          <input type="text" id="searchInput" class="search-input" placeholder="Search projects..." />
+          <div class="search-wrapper">
+            <input type="text" id="searchInput" class="search-input" placeholder="Search projects..." />
+            <button id="searchClear" class="search-clear" title="Clear search">&times;</button>
+          </div>
           <button id="addRootBtn" class="btn btn-ghost" title="Add another root directory">+</button>
           <button id="refreshBtn" class="btn btn-ghost" title="Rescan projects">&#x21bb;</button>
         </div>

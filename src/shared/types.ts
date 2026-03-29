@@ -45,4 +45,6 @@ export type WebviewToExt =
   | { type: 'project:open'; path: string }
   | { type: 'settings:addRoot'; path: string }
   | { type: 'settings:pickRoot' }
+  | { type: 'project:editManifest'; path: string }
+  | { type: 'settings:openConfig' }
   | { type: 'ready' };

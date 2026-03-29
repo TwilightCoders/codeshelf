@@ -50,6 +50,7 @@ const shelfScreen = document.getElementById('shelf')!;
 const loadingScreen = document.getElementById('loading')!;
 const shelfContent = document.getElementById('shelfContent')!;
 const searchInput = document.getElementById('searchInput') as HTMLInputElement;
+const searchClear = document.getElementById('searchClear')!;
 const pickRootBtn = document.getElementById('pickRootBtn')!;
 const addRootBtn = document.getElementById('addRootBtn')!;
 const refreshBtn = document.getElementById('refreshBtn')!;
@@ -95,6 +96,7 @@ function renderProjectCard(project: Project): string {
     <div class="project-card" data-path="${project.path}" title="${project.path}">
       <div class="card-poster" style="background-color: ${bgColor}">
         ${badge ? `<span class="card-badge">${badge}</span>` : ''}
+        <button class="edit-btn card-edit" data-edit-path="${project.path}" title="Edit project manifest">&#9998;</button>
       </div>
       <div class="card-info">
         <span class="card-name">${project.name}</span>
@@ -150,7 +152,7 @@ function renderShelf(shelf: Shelf, query: string): string {
 
   return `
     <section class="shelf-row">
-      <h2 class="shelf-row-title">${shelf.name}</h2>
+      <h2 class="shelf-row-title">${shelf.name} <button class="edit-btn shelf-edit" data-config-edit title="Edit CodeShelf settings">&#9998;</button></h2>
       <div class="shelf-row-content">${content}</div>
     </section>
   `;
@@ -163,11 +165,32 @@ function renderShelves(query: string = '') {
 
   // Attach click handlers
   shelfContent.querySelectorAll('.project-card').forEach(card => {
-    card.addEventListener('click', () => {
+    card.addEventListener('click', (e) => {
+      // Don't open project if clicking the edit button
+      if ((e.target as HTMLElement).closest('.edit-btn')) return;
       const projectPath = (card as HTMLElement).dataset.path;
       if (projectPath) {
         vscode.postMessage({ type: 'project:open', path: projectPath });
       }
+    });
+  });
+
+  // Edit buttons on project cards
+  shelfContent.querySelectorAll('.card-edit').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const editPath = (btn as HTMLElement).dataset.editPath;
+      if (editPath) {
+        vscode.postMessage({ type: 'project:editManifest', path: editPath });
+      }
+    });
+  });
+
+  // Edit buttons on shelf titles
+  shelfContent.querySelectorAll('.shelf-edit').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      vscode.postMessage({ type: 'settings:openConfig' });
     });
   });
 }
@@ -186,7 +209,15 @@ refreshBtn.addEventListener('click', () => {
 });
 
 searchInput.addEventListener('input', () => {
+  searchClear.style.display = searchInput.value ? 'block' : 'none';
   renderShelves(searchInput.value);
+});
+
+searchClear.addEventListener('click', () => {
+  searchInput.value = '';
+  searchClear.style.display = 'none';
+  renderShelves();
+  searchInput.focus();
 });
 
 // Message handler
