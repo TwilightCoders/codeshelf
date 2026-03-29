@@ -307,20 +307,60 @@ body {
   transform: translateY(0);
 }
 
-.card-poster {
-  height: 100px;
+/* ── Card poster with flip animation ── */
+.card-poster-flip {
+  height: 120px;
+  position: relative;
+  perspective: 600px;
+  overflow: hidden;
+  transform-style: preserve-3d;
+}
+
+.card-poster-face {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
-  overflow: hidden;
+  backface-visibility: hidden;
+  transition: transform 0.6s ease;
 }
 
-.card-poster::after {
+.card-poster-fallback {
+  transform: rotateY(0deg);
+}
+
+.card-poster-fallback::after {
   content: '';
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.3));
+}
+
+.card-poster-image {
+  transform: rotateY(180deg);
+  overflow: hidden;
+}
+
+.card-poster-image svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.card-poster-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* When flipped, show poster, hide fallback */
+.card-poster-flip.flipped .card-poster-fallback {
+  transform: rotateY(-180deg);
+}
+
+.card-poster-flip.flipped .card-poster-image {
+  transform: rotateY(0deg);
 }
 
 .card-badge {
@@ -382,51 +422,105 @@ body {
   opacity: 0.6;
 }
 
-/* ── Edit buttons ── */
-.edit-btn {
+/* ── Action buttons (star, hide, edit) ── */
+.action-btn {
   background: none;
   border: none;
   color: var(--vscode-editor-foreground);
   cursor: pointer;
   font-size: 13px;
-  padding: 4px 6px;
+  padding: 3px 5px;
   border-radius: 3px;
   opacity: 0;
-  transition: opacity 0.15s ease, background 0.15s ease;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-.edit-btn:hover {
+.action-btn:hover {
   background: var(--vscode-toolbar-hoverBackground);
-}
-
-.card-edit {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 2;
-  font-size: 14px;
-}
-
-.project-card:hover .card-edit {
-  opacity: 0.7;
-}
-
-.card-edit:hover {
   opacity: 1 !important;
 }
 
-.shelf-edit {
+/* Card name row with inline actions */
+.card-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.card-name-row .card-actions {
+  display: inline-flex;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.card-name-row .action-btn {
   font-size: 14px;
-  vertical-align: middle;
+}
+
+.project-card:hover .card-name-row .action-btn {
+  opacity: 0.5;
+}
+
+/* Shelf actions (inline with title) */
+.shelf-actions {
+  display: inline-flex;
+  gap: 2px;
   margin-left: 4px;
+  vertical-align: middle;
 }
 
-.shelf-row-title:hover .shelf-edit {
-  opacity: 0.7;
+.shelf-actions .action-btn {
+  font-size: 13px;
 }
 
-.shelf-edit:hover {
+.shelf-row-title:hover .shelf-actions .action-btn {
+  opacity: 0.6;
+}
+
+/* Star button */
+.star-btn .codicon {
+  color: inherit;
+}
+
+.star-btn:hover .codicon {
+  color: #e8b627 !important;
+}
+
+.star-btn.starred {
   opacity: 1 !important;
+}
+
+.star-btn.starred .codicon {
+  color: #e8b627;
+}
+
+/* Hide button */
+.hide-btn:hover .codicon {
+  color: var(--vscode-errorForeground, #f44) !important;
+}
+
+/* Starred shelf */
+.starred-shelf {
+  background:
+    linear-gradient(135deg,
+      rgba(232, 182, 39, 0.06) 0%,
+      rgba(232, 182, 39, 0.02) 30%,
+      transparent 60%
+    );
+  border-radius: 6px;
+  padding: 8px;
+  margin: -8px;
+  position: relative;
+}
+
+.starred-shelf::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(232, 182, 39, 0.15);
+  pointer-events: none;
 }
 
 /* ── Bookset ── */

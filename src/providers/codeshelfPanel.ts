@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
-import { ExtToWebview, WebviewToExt, Shelf, ScanDiff, RootsConfig } from '../shared/types';
+import { ExtToWebview, WebviewToExt, Shelf, ScanDiff, RootsConfig, Project } from '../shared/types';
 import { scanRoots } from '../services/projectScanner';
+import { detectCapabilities } from '../services/capabilities';
+import { PosterGenerator } from '../services/posterGenerator';
 
 function collectProjectPaths(shelves: Shelf[]): Set<string> {
   const paths = new Set<string>();
@@ -49,6 +51,7 @@ export class CodeShelfPanel {
   private readonly panel: vscode.WebviewPanel;
   private readonly context: vscode.ExtensionContext;
   private disposables: vscode.Disposable[] = [];
+  private posterGenerator?: PosterGenerator;
 
   private constructor(panel: vscode.WebviewPanel, context: vscode.ExtensionContext) {
     this.panel = panel;
@@ -79,6 +82,8 @@ export class CodeShelfPanel {
         localResourceRoots: [
           vscode.Uri.joinPath(context.extensionUri, 'out-webview'),
           vscode.Uri.joinPath(context.extensionUri, 'media'),
+          vscode.Uri.joinPath(context.extensionUri, 'node_modules', '@vscode', 'codicons', 'dist'),
+          context.globalStorageUri,
         ],
       },
     );
@@ -140,6 +145,20 @@ export class CodeShelfPanel {
         );
         break;
       }
+      case 'item:hide': {
+        await this.updateShelfMeta(msg.rootPath, msg.path, { hidden: true });
+        await this.scan();
+        break;
+      }
+      case 'item:star': {
+        await this.updateShelfMeta(msg.rootPath, msg.path, { starred: msg.starred });
+        await this.scan();
+        break;
+      }
+      case 'settings:openJson': {
+        await vscode.commands.executeCommand('workbench.action.openSettingsJson');
+        break;
+      }
     }
   }
 
@@ -153,6 +172,59 @@ export class CodeShelfPanel {
     await this.scan();
   }
 
+  private async updateShelfMeta(rootPath: string, shelfPath: string, updates: Record<string, unknown>) {
+    const config = vscode.workspace.getConfiguration('codeshelf');
+    const roots = config.get<RootsConfig>('roots', {});
+    // Find root by expanded or raw path
+    const rootKey = Object.keys(roots).find(k =>
+      k === rootPath || k.replace(/^~/, process.env.HOME ?? '') === rootPath
+    );
+    if (!rootKey) return;
+
+    const root = roots[rootKey];
+    if (!root.shelves) root.shelves = {};
+
+    // Try to find existing shelf entry by full path or basename
+    const basename = require('path').basename(shelfPath);
+    const shelfKey = root.shelves[shelfPath] ? shelfPath
+      : root.shelves[basename] ? basename
+      : basename; // default to basename for new entries
+
+    if (!root.shelves[shelfKey]) root.shelves[shelfKey] = {};
+    const shelf = root.shelves[shelfKey];
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === false || value === undefined || value === null || value === '') {
+        delete (shelf as Record<string, unknown>)[key];
+      } else {
+        (shelf as Record<string, unknown>)[key] = value;
+      }
+    }
+    // Clean up empty shelf entries
+    if (Object.keys(shelf).length === 0) {
+      delete root.shelves[shelfKey];
+    }
+    // Clean up empty shelves object
+    if (Object.keys(root.shelves).length === 0) {
+      delete root.shelves;
+    }
+
+    await config.update('roots', roots, vscode.ConfigurationTarget.Global);
+  }
+
+  private stripPosters(shelves: Shelf[]) {
+    for (const shelf of shelves) {
+      for (const item of shelf.items) {
+        if (item.kind === 'project') {
+          delete item.project.poster;
+        } else {
+          for (const p of item.projects) {
+            delete p.poster;
+          }
+        }
+      }
+    }
+  }
+
   private async onReady() {
     const { roots } = getConfig();
     const hasRoots = Object.keys(roots).length > 0;
@@ -161,9 +233,78 @@ export class CodeShelfPanel {
     if (hasRoots) {
       const cached = this.context.globalState.get<Shelf[]>(CodeShelfPanel.CACHE_KEY);
       if (cached && cached.length > 0) {
+        // Strip any stale poster URIs from cached data, then re-apply from files
+        this.stripPosters(cached);
+        await this.ensurePosterGenerator();
+        await this.applyPosterCache(cached);
         this.postMessage({ type: 'projects:loaded', shelves: cached });
       }
       await this.scan();
+    }
+  }
+
+  private collectProjects(shelves: Shelf[]): Project[] {
+    const projects: Project[] = [];
+    for (const shelf of shelves) {
+      for (const item of shelf.items) {
+        if (item.kind === 'project') {
+          projects.push(item.project);
+        } else {
+          projects.push(...item.projects);
+        }
+      }
+    }
+    return projects;
+  }
+
+  private async ensurePosterGenerator() {
+    if (this.posterGenerator) return;
+    const caps = await detectCapabilities();
+    if (caps.bestMethod === 'none') return;
+
+    this.posterGenerator = new PosterGenerator(this.context, caps, async (result) => {
+      const dataUri = await this.readSvg(result.posterUri);
+      if (dataUri) {
+        this.postMessage({
+          type: 'poster:loaded',
+          projectPath: result.projectPath,
+          posterUri: dataUri,
+        });
+      }
+    });
+  }
+
+  private async readSvg(filePath: string): Promise<string | undefined> {
+    try {
+      const fs = require('fs');
+      const svg = await fs.promises.readFile(filePath, 'utf-8');
+      // Validate it's actually SVG
+      if (svg.includes('<svg')) return svg;
+      return undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async applyPosterCache(shelves: Shelf[]) {
+    if (!this.posterGenerator) return;
+    const gen = this.posterGenerator;
+    for (const shelf of shelves) {
+      for (const item of shelf.items) {
+        if (item.kind === 'project') {
+          const cached = gen.getCachedPosterPath(item.project);
+          if (cached) {
+            item.project.poster = await this.readSvg(cached);
+          }
+        } else {
+          for (const p of item.projects) {
+            const cached = gen.getCachedPosterPath(p);
+            if (cached) {
+              p.poster = await this.readSvg(cached);
+            }
+          }
+        }
+      }
     }
   }
 
@@ -176,10 +317,23 @@ export class CodeShelfPanel {
     }
 
     const shelves: Shelf[] = await scanRoots(roots, scanDepth);
+
     const diff = cached ? computeDiff(cached, shelves) : undefined;
+    // Cache shelves WITHOUT poster URIs (those are transient webview URIs)
     await this.context.globalState.update(CodeShelfPanel.CACHE_KEY, shelves);
+
+    // Apply cached poster files before sending to webview
+    await this.ensurePosterGenerator();
+    await this.applyPosterCache(shelves);
+
     this.postMessage({ type: 'projects:scanning', scanning: false });
     this.postMessage({ type: 'projects:loaded', shelves, diff });
+
+    // Enqueue projects without posters for background generation
+    if (this.posterGenerator) {
+      const allProjects = this.collectProjects(shelves);
+      this.posterGenerator.enqueue(allProjects);
+    }
   }
 
   private getHtml(): string {
@@ -190,6 +344,9 @@ export class CodeShelfPanel {
     const styleUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'media', 'styles', 'main.css'),
     );
+    const codiconUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'node_modules', '@vscode', 'codicons', 'dist', 'codicon.css'),
+    );
     const nonce = getNonce();
 
     return /*html*/ `<!DOCTYPE html>
@@ -198,7 +355,8 @@ export class CodeShelfPanel {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:;">
+    content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource};">
+  <link rel="stylesheet" href="${codiconUri}">
   <link rel="stylesheet" href="${styleUri}">
   <title>CodeShelf</title>
 </head>
@@ -228,8 +386,9 @@ export class CodeShelfPanel {
             <input type="text" id="searchInput" class="search-input" placeholder="Search projects..." />
             <button id="searchClear" class="search-clear" title="Clear search">&times;</button>
           </div>
-          <button id="addRootBtn" class="btn btn-ghost" title="Add another root directory">+</button>
-          <button id="refreshBtn" class="btn btn-ghost" title="Rescan projects">&#x21bb;</button>
+          <button id="addRootBtn" class="btn btn-ghost" title="Add another root directory"><i class="codicon codicon-add"></i></button>
+          <button id="refreshBtn" class="btn btn-ghost" title="Rescan projects"><i class="codicon codicon-refresh"></i></button>
+          <button id="settingsBtn" class="btn btn-ghost" title="Edit settings (JSON)"><i class="codicon codicon-settings-gear"></i></button>
         </div>
       </header>
       <div id="shelfContent" class="shelf-content"></div>

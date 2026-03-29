@@ -8,12 +8,15 @@ export interface Project {
   poster?: string;
   description?: string;
   workspaceFile?: string;
+  starred?: boolean;
 }
 
 export interface Shelf {
   name: string;
   path: string;
   rootLabel: string;
+  rootPath: string;
+  starred?: boolean;
   items: ShelfItem[];
 }
 
@@ -28,12 +31,15 @@ export interface ProjectMeta {
   description?: string;
   poster?: string;
   tags?: string[];
+  hidden?: boolean;
+  starred?: boolean;
 }
 
 export interface ShelfMeta {
   name?: string;
   description?: string;
   hidden?: boolean;
+  starred?: boolean;
   projects?: Record<string, ProjectMeta>;
 }
 
@@ -53,7 +59,8 @@ export type RootsConfig = Record<string, RootConfig>;
 export type ExtToWebview =
   | { type: 'projects:loaded'; shelves: Shelf[]; diff?: ScanDiff }
   | { type: 'projects:scanning'; scanning: boolean }
-  | { type: 'settings:state'; hasRoots: boolean };
+  | { type: 'settings:state'; hasRoots: boolean }
+  | { type: 'poster:loaded'; projectPath: string; posterUri: string };
 
 export interface ScanDiff {
   added: number;
@@ -68,4 +75,7 @@ export type WebviewToExt =
   | { type: 'settings:addRoot'; path: string }
   | { type: 'settings:pickRoot' }
   | { type: 'item:editMeta'; path: string }
+  | { type: 'item:hide'; path: string; rootPath: string }
+  | { type: 'item:star'; path: string; rootPath: string; starred: boolean }
+  | { type: 'settings:openJson' }
   | { type: 'ready' };

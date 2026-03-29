@@ -44,7 +44,10 @@
               },
               "defaultVisibility": {
                 "type": "string",
-                "enum": ["show-all", "hide-all"],
+                "enum": [
+                  "show-all",
+                  "hide-all"
+                ],
                 "default": "show-all",
                 "description": "Whether to show or hide shelves by default"
               },
@@ -63,19 +66,50 @@
                 "additionalProperties": {
                   "type": "object",
                   "properties": {
-                    "name": { "type": "string", "description": "Display name override" },
-                    "description": { "type": "string" },
-                    "hidden": { "type": "boolean", "description": "Hide this shelf" },
+                    "name": {
+                      "type": "string",
+                      "description": "Display name override"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "hidden": {
+                      "type": "boolean",
+                      "description": "Hide this shelf"
+                    },
+                    "starred": {
+                      "type": "boolean",
+                      "description": "Star/favorite this shelf"
+                    },
                     "projects": {
                       "type": "object",
                       "description": "Per-project overrides, keyed by path or directory name",
                       "additionalProperties": {
                         "type": "object",
                         "properties": {
-                          "name": { "type": "string" },
-                          "description": { "type": "string" },
-                          "poster": { "type": "string" },
-                          "tags": { "type": "array", "items": { "type": "string" } }
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "poster": {
+                            "type": "string"
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "hidden": {
+                            "type": "boolean",
+                            "description": "Hide this project"
+                          },
+                          "starred": {
+                            "type": "boolean",
+                            "description": "Star/favorite this project"
+                          }
                         }
                       }
                     }
@@ -110,5 +144,8 @@
     "@types/vscode": "^1.108.0",
     "@vscode/vsce": "^3.0.0",
     "typescript": "^5.8.0"
+  },
+  "dependencies": {
+    "@vscode/codicons": "^0.0.45"
   }
 }

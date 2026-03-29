@@ -96,6 +96,7 @@ async function buildProject(
     poster: projectMeta?.poster,
     description: projectMeta?.description,
     workspaceFile,
+    starred: projectMeta?.starred,
   };
 }
 
@@ -137,7 +138,9 @@ async function scanDirectory(
     const markers = await detectMarkers(subdir);
     if (markers.length > 0) {
       const pMeta = resolveProjectMeta(subdir, shelfMeta);
-      projects.push(await buildProject(subdir, markers, pMeta));
+      if (!pMeta?.hidden) {
+        projects.push(await buildProject(subdir, markers, pMeta));
+      }
     } else if (currentDepth < maxDepth) {
       const nested = await scanDirectory(subdir, maxDepth, hiddenSet, shelfMeta, currentDepth + 1);
       if (nested.projects.length > 0 || nested.groups.length > 0) {
@@ -159,6 +162,12 @@ export async function scanRoots(
 ): Promise<Shelf[]> {
   const shelves: Shelf[] = [];
 
+  // Build a set of all expanded root paths for de-duplication
+  const allRootPaths = new Set<string>();
+  for (const root of Object.keys(rootsConfig)) {
+    allRootPaths.add(root.replace(/^~/, process.env.HOME ?? ''));
+  }
+
   for (const [root, rootConfig] of Object.entries(rootsConfig)) {
     const expandedRoot = root.replace(/^~/, process.env.HOME ?? '');
     const rootLabel = rootConfig.label ?? path.basename(expandedRoot);
@@ -175,6 +184,9 @@ export async function scanRoots(
       .map(e => ({ name: e.name, path: path.join(expandedRoot, e.name) }));
 
     for (const topDir of topDirs) {
+      // Skip if this directory is itself configured as a root
+      if (allRootPaths.has(topDir.path)) continue;
+
       const shelfMeta = resolveShelfMeta(topDir.path, rootConfig);
 
       // Skip if explicitly hidden in shelf metadata
@@ -188,6 +200,8 @@ export async function scanRoots(
           name: shelfMeta?.name ?? topDir.name,
           path: topDir.path,
           rootLabel,
+          rootPath: expandedRoot,
+          starred: shelfMeta?.starred,
           items: [{ kind: 'project', project }],
         });
         continue;
@@ -221,6 +235,8 @@ export async function scanRoots(
           name: shelfMeta?.name ?? topDir.name,
           path: topDir.path,
           rootLabel,
+          rootPath: expandedRoot,
+          starred: shelfMeta?.starred,
           items,
         });
       }

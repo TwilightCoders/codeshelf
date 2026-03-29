@@ -72,6 +72,7 @@ const syncStatus = document.getElementById('syncStatus')!;
 const pickRootBtn = document.getElementById('pickRootBtn')!;
 const addRootBtn = document.getElementById('addRootBtn')!;
 const refreshBtn = document.getElementById('refreshBtn')!;
+const settingsBtn = document.getElementById('settingsBtn')!;
 
 function showScreen(screen: 'setup' | 'shelf' | 'loading') {
   setupScreen.style.display = screen === 'setup' ? 'flex' : 'none';
@@ -137,7 +138,7 @@ function timeAgo(ms: number): string {
   return `${Math.floor(months / 12)}y ago`;
 }
 
-function renderProjectCard(project: Project): string {
+function renderProjectCard(project: Project, rootPath: string = ''): string {
   const lang = project.primaryLanguage;
   const bgColor = lang ? LANGUAGE_COLORS[lang] ?? hashColor(project.name) : hashColor(project.name);
   const badge = lang ? LANGUAGE_ICONS[lang] ?? lang.slice(0, 2).toUpperCase() : '';
@@ -145,14 +146,27 @@ function renderProjectCard(project: Project): string {
   const modified = `<span class="card-time">${timeAgo(project.lastModified)}</span>`;
   const desc = project.description ? `<p class="card-description">${project.description}</p>` : '';
 
+  const hasPoster = !!project.poster;
+  const posterFront = hasPoster
+    ? `<div class="card-poster-face card-poster-image">${project.poster}</div>`
+    : '';
+  const posterBack = `<div class="card-poster-face card-poster-fallback" style="background-color: ${bgColor}">${badge ? `<span class="card-badge">${badge}</span>` : ''}</div>`;
+
   return `
-    <div class="project-card" data-path="${project.path}" ${project.workspaceFile ? `data-workspace="${project.workspaceFile}"` : ''} title="${project.path}">
-      <div class="card-poster" style="background-color: ${bgColor}">
-        ${badge ? `<span class="card-badge">${badge}</span>` : ''}
-        <button class="edit-btn card-edit" data-edit-path="${project.path}" title="Edit project metadata">&#9998;</button>
+    <div class="project-card ${hasPoster ? 'has-poster' : ''}" data-path="${project.path}" ${project.workspaceFile ? `data-workspace="${project.workspaceFile}"` : ''} title="${project.path}">
+      <div class="card-poster-flip ${hasPoster ? 'flipped' : ''}">
+        ${posterBack}
+        ${posterFront}
       </div>
       <div class="card-info">
-        <span class="card-name">${project.name}</span>
+        <div class="card-name-row">
+          <span class="card-name">${project.name}</span>
+          <span class="card-actions">
+            <button class="action-btn star-btn ${project.starred ? 'starred' : ''}" data-star-path="${project.path}" data-root-path="${rootPath}" title="Star"><i class="codicon codicon-star-${project.starred ? 'full' : 'empty'}"></i></button>
+            <button class="action-btn hide-btn" data-hide-path="${project.path}" data-root-path="${rootPath}" title="Hide"><i class="codicon codicon-eye-closed"></i></button>
+            <button class="action-btn edit-btn" data-edit-path="${project.path}" title="Edit"><i class="codicon codicon-edit"></i></button>
+          </span>
+        </div>
         ${desc}
         <div class="card-meta">
           ${branch}
@@ -163,10 +177,13 @@ function renderProjectCard(project: Project): string {
   `;
 }
 
-function renderBookset(item: Extract<ShelfItem, { kind: 'bookset' }>): string {
+function renderBookset(item: Extract<ShelfItem, { kind: 'bookset' }>, rootPath: string): string {
   const cards = item.projects
-    .sort((a, b) => b.lastModified - a.lastModified)
-    .map(renderProjectCard)
+    .sort((a, b) => {
+      if (a.starred !== b.starred) return a.starred ? -1 : 1;
+      return b.lastModified - a.lastModified;
+    })
+    .map(p => renderProjectCard(p, rootPath))
     .join('');
 
   return `
@@ -197,19 +214,24 @@ function renderShelf(shelf: Shelf, query: string): string {
   if (filteredItems.length === 0) return '';
 
   const content = filteredItems.map(item => {
-    if (item.kind === 'project') return renderProjectCard(item.project);
-    return renderBookset(item);
+    if (item.kind === 'project') return renderProjectCard(item.project, shelf.rootPath);
+    return renderBookset(item, shelf.rootPath);
   }).join('');
 
   const isCollapsed = viewState.collapsedShelves[shelf.path] ?? false;
   const arrowClass = isCollapsed ? 'collapse-arrow collapsed' : 'collapse-arrow';
+  const starredClass = shelf.starred ? 'starred-shelf' : '';
 
   return `
-    <section class="shelf-row ${isCollapsed ? 'collapsed' : ''}" data-shelf-path="${shelf.path}">
+    <section class="shelf-row ${isCollapsed ? 'collapsed' : ''} ${starredClass}" data-shelf-path="${shelf.path}">
       <h3 class="shelf-row-title">
         <span class="shelf-collapse ${arrowClass}" data-collapse-shelf="${shelf.path}">&#9656;</span>
         ${shelf.name}
-        <button class="edit-btn shelf-edit" data-edit-path="${shelf.path}" title="Edit shelf metadata">&#9998;</button>
+        <span class="shelf-actions">
+          <button class="action-btn star-btn ${shelf.starred ? 'starred' : ''}" data-star-path="${shelf.path}" data-root-path="${shelf.rootPath}" title="Star shelf"><i class="codicon codicon-star-${shelf.starred ? 'full' : 'empty'}"></i></button>
+          <button class="action-btn hide-btn" data-hide-path="${shelf.path}" data-root-path="${shelf.rootPath}" title="Hide shelf"><i class="codicon codicon-eye-closed"></i></button>
+          <button class="action-btn edit-btn" data-edit-path="${shelf.path}" title="Edit shelf metadata"><i class="codicon codicon-edit"></i></button>
+        </span>
       </h3>
       <div class="shelf-row-content ${isCollapsed ? 'hidden' : ''}">${content}</div>
     </section>
@@ -223,7 +245,30 @@ function groupShelvesByRoot(shelves: Shelf[]): Map<string, Shelf[]> {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(shelf);
   }
-  return groups;
+
+  // Sort shelves within each root: starred first, then by name
+  for (const [, group] of groups) {
+    group.sort((a, b) => {
+      if (a.starred !== b.starred) return a.starred ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  // Sort roots: those with any starred content first
+  const sorted = new Map<string, Shelf[]>();
+  const entries = [...groups.entries()];
+  entries.sort(([, a], [, b]) => {
+    const aHasStarred = a.some(s => s.starred || s.items.some(
+      i => i.kind === 'project' && i.project.starred
+    ));
+    const bHasStarred = b.some(s => s.starred || s.items.some(
+      i => i.kind === 'project' && i.project.starred
+    ));
+    if (aHasStarred !== bHasStarred) return aHasStarred ? -1 : 1;
+    return 0;
+  });
+  for (const [k, v] of entries) sorted.set(k, v);
+  return sorted;
 }
 
 function renderShelves(query: string = '') {
@@ -265,7 +310,7 @@ function attachHandlers() {
   // Project card clicks
   shelfContent.querySelectorAll('.project-card').forEach(card => {
     card.addEventListener('click', (e) => {
-      if ((e.target as HTMLElement).closest('.edit-btn')) return;
+      if ((e.target as HTMLElement).closest('.action-btn')) return;
       const el = card as HTMLElement;
       const projectPath = el.dataset.path;
       if (projectPath) {
@@ -285,6 +330,33 @@ function attachHandlers() {
       const editPath = (btn as HTMLElement).dataset.editPath;
       if (editPath) {
         vscode.postMessage({ type: 'item:editMeta', path: editPath });
+      }
+    });
+  });
+
+  // Hide buttons
+  shelfContent.querySelectorAll('.hide-btn[data-hide-path]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const el = btn as HTMLElement;
+      const hidePath = el.dataset.hidePath;
+      const rootPath = el.dataset.rootPath;
+      if (hidePath && rootPath) {
+        vscode.postMessage({ type: 'item:hide', path: hidePath, rootPath });
+      }
+    });
+  });
+
+  // Star buttons
+  shelfContent.querySelectorAll('.star-btn[data-star-path]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const el = btn as HTMLElement;
+      const starPath = el.dataset.starPath;
+      const rootPath = el.dataset.rootPath;
+      const isCurrentlyStarred = el.classList.contains('starred');
+      if (starPath && rootPath) {
+        vscode.postMessage({ type: 'item:star', path: starPath, rootPath, starred: !isCurrentlyStarred });
       }
     });
   });
@@ -323,6 +395,10 @@ refreshBtn.addEventListener('click', () => {
   vscode.postMessage({ type: 'projects:requestScan' });
 });
 
+settingsBtn.addEventListener('click', () => {
+  vscode.postMessage({ type: 'settings:openJson' });
+});
+
 searchInput.addEventListener('input', () => {
   searchClear.style.display = searchInput.value ? 'block' : 'none';
   renderShelves(searchInput.value);
@@ -359,6 +435,41 @@ window.addEventListener('message', (event: MessageEvent<ExtToWebview>) => {
       showScreen('shelf');
       showSyncResult(msg.diff);
       break;
+    case 'poster:loaded': {
+      // Find the card and trigger a flip animation
+      const card = shelfContent.querySelector(
+        `.project-card[data-path="${CSS.escape(msg.projectPath)}"]`
+      );
+      if (!card) break;
+      const flipContainer = card.querySelector('.card-poster-flip');
+      if (!flipContainer) break;
+
+      // Add the poster image face
+      const imgFace = document.createElement('div');
+      imgFace.className = 'card-poster-face card-poster-image';
+      imgFace.innerHTML = msg.posterUri;
+      flipContainer.appendChild(imgFace);
+
+      // Trigger flip after a brief delay for the image to load
+      requestAnimationFrame(() => {
+        flipContainer.classList.add('flipped');
+        card.classList.add('has-poster');
+      });
+
+      // Update the shelf data so re-renders preserve the poster
+      for (const shelf of allShelves) {
+        for (const item of shelf.items) {
+          if (item.kind === 'project' && item.project.path === msg.projectPath) {
+            item.project.poster = msg.posterUri;
+          } else if (item.kind === 'bookset') {
+            for (const p of item.projects) {
+              if (p.path === msg.projectPath) p.poster = msg.posterUri;
+            }
+          }
+        }
+      }
+      break;
+    }
   }
 });
 
