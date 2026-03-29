@@ -1,0 +1,71 @@
+{
+  "name": "codeshelf",
+  "displayName": "CodeShelf",
+  "description": "A Steam Library-style project browser for VS Code",
+  "version": "0.1.0",
+  "publisher": "twilightcoders",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.108.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codeshelf.open",
+        "title": "Open CodeShelf",
+        "category": "CodeShelf"
+      }
+    ],
+    "configuration": {
+      "title": "CodeShelf",
+      "properties": {
+        "codeshelf.roots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Root directories to scan for projects"
+        },
+        "codeshelf.hidden": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Directories to hide from the shelf"
+        },
+        "codeshelf.scanDepth": {
+          "type": "number",
+          "default": 3,
+          "description": "Maximum directory depth to scan for projects"
+        },
+        "codeshelf.openInNewWindow": {
+          "type": "boolean",
+          "default": false,
+          "description": "Open projects in a new window instead of the current one"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./ && tsc -p ./tsconfig.webview.json",
+    "watch": "tsc -watch -p ./",
+    "watch:webview": "tsc -watch -p ./tsconfig.webview.json",
+    "vscode:prepublish": "npm run compile",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.108.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "^5.8.0"
+  }
+}
