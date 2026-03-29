@@ -17,7 +17,7 @@ export const PROJECT_MARKERS: Record<string, string> = {
   'deno.json': 'deno',
 };
 
-export const GLOB_MARKERS = ['*.gemspec', '*.sln', '*.csproj', '*.xcodeproj', '*.xcworkspace'];
+export const GLOB_MARKERS = ['*.gemspec', '*.sln', '*.csproj', '*.xcodeproj', '*.xcworkspace', '*.code-workspace'];
 
 export const SKIP_DIRS = new Set([
   'node_modules', '.git', 'vendor', 'target', 'build', 'dist',
@@ -29,5 +29,3 @@ export const LANGUAGE_PRIORITY: string[] = [
   'rust', 'go', 'elixir', 'ruby', 'python', 'javascript',
   'java', 'cpp', 'dart', 'php', 'deno', 'make',
 ];
-
-export const MANIFEST_FILE = '.codeshelf.json';

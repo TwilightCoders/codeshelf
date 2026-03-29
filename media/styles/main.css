@@ -88,6 +88,25 @@ body {
   background: var(--vscode-toolbar-hoverBackground);
 }
 
+/* ── Sync status ── */
+.sync-status {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.sync-status.visible {
+  opacity: 0.7;
+}
+
+.sync-status.fade-out {
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
 /* ── Loading screen ── */
 #loading {
   align-items: center;
@@ -186,22 +205,85 @@ body {
   padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 24px;
 }
 
-/* ── Shelf row (one per top-level directory) ── */
-.shelf-row-title {
-  font-size: 16px;
+/* ── Root group ── */
+.root-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.root-header {
+  font-size: 15px;
   font-weight: 600;
-  margin-bottom: 16px;
+  color: var(--vscode-editor-foreground);
+  padding: 8px 4px;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.root-shelves {
+  border: 1px solid var(--vscode-panel-border, rgba(255,255,255,0.10));
+  border-radius: 6px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.root-shelves.hidden {
+  display: none;
+}
+
+/* ── Collapse arrows ── */
+.collapse-arrow {
+  display: inline-block;
+  font-size: 12px;
+  transition: transform 0.15s ease;
+  transform: rotate(90deg);
+  opacity: 0.5;
+  cursor: pointer;
+}
+
+.collapse-arrow.collapsed {
+  transform: rotate(0deg);
+}
+
+.collapse-arrow:hover {
+  opacity: 1;
+}
+
+/* ── Shelf row ── */
+.shelf-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.shelf-row-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
   color: var(--vscode-editor-foreground);
   letter-spacing: -0.3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
 }
 
 .shelf-row-content {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 16px;
+}
+
+.shelf-row-content.hidden {
+  display: none;
 }
 
 /* ── Project card ── */

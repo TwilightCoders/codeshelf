@@ -1,4 +1,4 @@
-import { ExtToWebview, WebviewToExt, Shelf, ShelfItem, Project } from '../shared/types';
+import { ExtToWebview, WebviewToExt, Shelf, ShelfItem, Project, ScanDiff } from '../shared/types';
 
 declare function acquireVsCodeApi(): {
   postMessage(msg: WebviewToExt): void;
@@ -6,7 +6,23 @@ declare function acquireVsCodeApi(): {
   setState(state: unknown): void;
 };
 
+interface ViewState {
+  collapsedRoots: Record<string, boolean>;
+  collapsedShelves: Record<string, boolean>;
+}
+
 const vscode = acquireVsCodeApi();
+
+function loadState(): ViewState {
+  const saved = vscode.getState() as ViewState | null;
+  return saved ?? { collapsedRoots: {}, collapsedShelves: {} };
+}
+
+let viewState = loadState();
+
+function saveState() {
+  vscode.setState(viewState);
+}
 
 const LANGUAGE_ICONS: Record<string, string> = {
   javascript: 'JS',
@@ -43,6 +59,7 @@ const LANGUAGE_COLORS: Record<string, string> = {
 };
 
 let allShelves: Shelf[] = [];
+let syncFadeTimer: ReturnType<typeof setTimeout> | undefined;
 
 // Elements
 const setupScreen = document.getElementById('setup')!;
@@ -51,6 +68,7 @@ const loadingScreen = document.getElementById('loading')!;
 const shelfContent = document.getElementById('shelfContent')!;
 const searchInput = document.getElementById('searchInput') as HTMLInputElement;
 const searchClear = document.getElementById('searchClear')!;
+const syncStatus = document.getElementById('syncStatus')!;
 const pickRootBtn = document.getElementById('pickRootBtn')!;
 const addRootBtn = document.getElementById('addRootBtn')!;
 const refreshBtn = document.getElementById('refreshBtn')!;
@@ -59,6 +77,41 @@ function showScreen(screen: 'setup' | 'shelf' | 'loading') {
   setupScreen.style.display = screen === 'setup' ? 'flex' : 'none';
   shelfScreen.style.display = screen === 'shelf' ? 'flex' : 'none';
   loadingScreen.style.display = screen === 'loading' ? 'flex' : 'none';
+}
+
+function showSyncStatus(text: string, persistent: boolean = false) {
+  if (syncFadeTimer) clearTimeout(syncFadeTimer);
+  syncStatus.textContent = text;
+  syncStatus.classList.remove('fade-out');
+  syncStatus.classList.add('visible');
+
+  if (!persistent) {
+    syncFadeTimer = setTimeout(() => {
+      syncStatus.classList.add('fade-out');
+      syncFadeTimer = setTimeout(() => {
+        syncStatus.classList.remove('visible', 'fade-out');
+      }, 600);
+    }, 3000);
+  }
+}
+
+function showSyncScanning() {
+  showSyncStatus('syncing...', true);
+}
+
+function showSyncResult(diff?: ScanDiff) {
+  if (!diff) {
+    showSyncStatus('updated');
+    return;
+  }
+  if (!diff.changed) {
+    showSyncStatus('up to date');
+    return;
+  }
+  const parts: string[] = [];
+  if (diff.added > 0) parts.push(`+${diff.added} new`);
+  if (diff.removed > 0) parts.push(`-${diff.removed} removed`);
+  showSyncStatus(`updated: ${parts.join(', ')}`);
 }
 
 function hashColor(name: string): string {
@@ -93,10 +146,10 @@ function renderProjectCard(project: Project): string {
   const desc = project.description ? `<p class="card-description">${project.description}</p>` : '';
 
   return `
-    <div class="project-card" data-path="${project.path}" title="${project.path}">
+    <div class="project-card" data-path="${project.path}" ${project.workspaceFile ? `data-workspace="${project.workspaceFile}"` : ''} title="${project.path}">
       <div class="card-poster" style="background-color: ${bgColor}">
         ${badge ? `<span class="card-badge">${badge}</span>` : ''}
-        <button class="edit-btn card-edit" data-edit-path="${project.path}" title="Edit project manifest">&#9998;</button>
+        <button class="edit-btn card-edit" data-edit-path="${project.path}" title="Edit project metadata">&#9998;</button>
       </div>
       <div class="card-info">
         <span class="card-name">${project.name}</span>
@@ -128,7 +181,6 @@ function renderBookset(item: Extract<ShelfItem, { kind: 'bookset' }>): string {
 }
 
 function renderShelf(shelf: Shelf, query: string): string {
-  // If the shelf name itself matches, show everything in it
   const shelfMatches = query && shelf.name.toLowerCase().includes(query);
 
   const filteredItems = query && !shelfMatches
@@ -136,7 +188,6 @@ function renderShelf(shelf: Shelf, query: string): string {
         if (item.kind === 'project') {
           return item.project.name.toLowerCase().includes(query) ? item : null;
         }
-        // If the bookset name matches, show all its projects
         if (item.name.toLowerCase().includes(query)) return item;
         const filtered = item.projects.filter(p => p.name.toLowerCase().includes(query));
         return filtered.length > 0 ? { ...item, projects: filtered } : null;
@@ -150,47 +201,111 @@ function renderShelf(shelf: Shelf, query: string): string {
     return renderBookset(item);
   }).join('');
 
+  const isCollapsed = viewState.collapsedShelves[shelf.path] ?? false;
+  const arrowClass = isCollapsed ? 'collapse-arrow collapsed' : 'collapse-arrow';
+
   return `
-    <section class="shelf-row">
-      <h2 class="shelf-row-title">${shelf.name} <button class="edit-btn shelf-edit" data-config-edit title="Edit CodeShelf settings">&#9998;</button></h2>
-      <div class="shelf-row-content">${content}</div>
+    <section class="shelf-row ${isCollapsed ? 'collapsed' : ''}" data-shelf-path="${shelf.path}">
+      <h3 class="shelf-row-title">
+        <span class="shelf-collapse ${arrowClass}" data-collapse-shelf="${shelf.path}">&#9656;</span>
+        ${shelf.name}
+        <button class="edit-btn shelf-edit" data-edit-path="${shelf.path}" title="Edit shelf metadata">&#9998;</button>
+      </h3>
+      <div class="shelf-row-content ${isCollapsed ? 'hidden' : ''}">${content}</div>
     </section>
   `;
 }
 
+function groupShelvesByRoot(shelves: Shelf[]): Map<string, Shelf[]> {
+  const groups = new Map<string, Shelf[]>();
+  for (const shelf of shelves) {
+    const key = shelf.rootLabel;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(shelf);
+  }
+  return groups;
+}
+
 function renderShelves(query: string = '') {
   const q = query.toLowerCase().trim();
-  const html = allShelves.map(s => renderShelf(s, q)).join('');
-  shelfContent.innerHTML = html || '<p class="empty-state">No projects found.</p>';
 
-  // Attach click handlers
+  const rootGroups = groupShelvesByRoot(allShelves);
+  let html = '';
+
+  for (const [rootLabel, shelves] of rootGroups) {
+    // If searching and root label matches, show all shelves in this root
+    const rootMatches = q && rootLabel.toLowerCase().includes(q);
+
+    const shelfHtml = shelves
+      .map(s => renderShelf(s, rootMatches ? '' : q))
+      .filter(h => h.length > 0)
+      .join('');
+
+    if (!shelfHtml) continue;
+
+    const isCollapsed = viewState.collapsedRoots[rootLabel] ?? false;
+    const arrowClass = isCollapsed ? 'collapse-arrow collapsed' : 'collapse-arrow';
+
+    html += `
+      <div class="root-group ${isCollapsed ? 'collapsed' : ''}" data-root-label="${rootLabel}">
+        <h2 class="root-header">
+          <span class="root-collapse ${arrowClass}" data-collapse-root="${rootLabel}">&#9656;</span>
+          ${rootLabel}
+        </h2>
+        <div class="root-shelves ${isCollapsed ? 'hidden' : ''}">${shelfHtml}</div>
+      </div>
+    `;
+  }
+
+  shelfContent.innerHTML = html || '<p class="empty-state">No projects found.</p>';
+  attachHandlers();
+}
+
+function attachHandlers() {
+  // Project card clicks
   shelfContent.querySelectorAll('.project-card').forEach(card => {
     card.addEventListener('click', (e) => {
-      // Don't open project if clicking the edit button
       if ((e.target as HTMLElement).closest('.edit-btn')) return;
-      const projectPath = (card as HTMLElement).dataset.path;
+      const el = card as HTMLElement;
+      const projectPath = el.dataset.path;
       if (projectPath) {
-        vscode.postMessage({ type: 'project:open', path: projectPath });
+        vscode.postMessage({
+          type: 'project:open',
+          path: projectPath,
+          workspaceFile: el.dataset.workspace,
+        });
       }
     });
   });
 
-  // Edit buttons on project cards
-  shelfContent.querySelectorAll('.card-edit').forEach(btn => {
+  // Edit buttons
+  shelfContent.querySelectorAll('.edit-btn[data-edit-path]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const editPath = (btn as HTMLElement).dataset.editPath;
       if (editPath) {
-        vscode.postMessage({ type: 'project:editManifest', path: editPath });
+        vscode.postMessage({ type: 'item:editMeta', path: editPath });
       }
     });
   });
 
-  // Edit buttons on shelf titles
-  shelfContent.querySelectorAll('.shelf-edit').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      vscode.postMessage({ type: 'settings:openConfig' });
+  // Root collapse toggles
+  shelfContent.querySelectorAll('.root-collapse').forEach(el => {
+    el.addEventListener('click', () => {
+      const rootLabel = (el as HTMLElement).dataset.collapseRoot!;
+      viewState.collapsedRoots[rootLabel] = !viewState.collapsedRoots[rootLabel];
+      saveState();
+      renderShelves(searchInput.value);
+    });
+  });
+
+  // Shelf collapse toggles
+  shelfContent.querySelectorAll('.shelf-collapse').forEach(el => {
+    el.addEventListener('click', () => {
+      const shelfPath = (el as HTMLElement).dataset.collapseShelf!;
+      viewState.collapsedShelves[shelfPath] = !viewState.collapsedShelves[shelfPath];
+      saveState();
+      renderShelves(searchInput.value);
     });
   });
 }
@@ -234,12 +349,15 @@ window.addEventListener('message', (event: MessageEvent<ExtToWebview>) => {
     case 'projects:scanning':
       if (msg.scanning && allShelves.length === 0) {
         showScreen('loading');
+      } else if (msg.scanning) {
+        showSyncScanning();
       }
       break;
     case 'projects:loaded':
       allShelves = msg.shelves;
       renderShelves(searchInput.value);
       showScreen('shelf');
+      showSyncResult(msg.diff);
       break;
   }
 });

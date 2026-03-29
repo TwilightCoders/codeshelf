@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <!-- Bookshelf icon: two books on a shelf -->
+  <!-- Shelf base -->
+  <rect x="1" y="13" width="14" height="1.5" rx="0.5" fill="#c5c5c5"/>
+  <!-- Book 1 (tall) -->
+  <rect x="3" y="3" width="3" height="10" rx="0.75" fill="#c5c5c5"/>
+  <!-- Book 2 (medium) -->
+  <rect x="7" y="5" width="3" height="8" rx="0.75" fill="#9e9e9e"/>
+  <!-- Book 3 (short) -->
+  <rect x="11" y="7" width="2.5" height="6" rx="0.75" fill="#c5c5c5"/>
+  <!-- Book 1 spine line -->
+  <line x1="4.5" y1="4.5" x2="4.5" y2="11.5" stroke="#808080" stroke-width="0.5"/>
+  <!-- Book 2 spine line -->
+  <line x1="8.5" y1="6.5" x2="8.5" y2="11.5" stroke="#707070" stroke-width="0.5"/>
+</svg>

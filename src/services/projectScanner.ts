@@ -2,9 +2,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
   PROJECT_MARKERS, GLOB_MARKERS, SKIP_DIRS,
-  LANGUAGE_PRIORITY, MANIFEST_FILE,
+  LANGUAGE_PRIORITY,
 } from '../shared/constants';
-import { Project, Shelf, ShelfItem, CodeShelfManifest } from '../shared/types';
+import { Project, Shelf, ShelfItem, RootsConfig, RootConfig, ShelfMeta, ProjectMeta } from '../shared/types';
 import { getBranch } from './gitInfo';
 
 async function exists(p: string): Promise<boolean> {
@@ -16,27 +16,15 @@ async function exists(p: string): Promise<boolean> {
   }
 }
 
-async function readManifest(dir: string): Promise<CodeShelfManifest | undefined> {
-  const manifestPath = path.join(dir, MANIFEST_FILE);
-  try {
-    const raw = await fs.promises.readFile(manifestPath, 'utf-8');
-    return JSON.parse(raw) as CodeShelfManifest;
-  } catch {
-    return undefined;
-  }
-}
-
 async function detectMarkers(dir: string): Promise<string[]> {
   const found: string[] = [];
 
-  // Check exact-name markers
   for (const marker of Object.keys(PROJECT_MARKERS)) {
     if (await exists(path.join(dir, marker))) {
       found.push(marker);
     }
   }
 
-  // Check glob-pattern markers (*.gemspec, *.sln, etc.)
   try {
     const entries = await fs.promises.readdir(dir);
     for (const pattern of GLOB_MARKERS) {
@@ -46,7 +34,7 @@ async function detectMarkers(dir: string): Promise<string[]> {
       }
     }
   } catch {
-    // Can't read directory — skip glob markers
+    // Can't read directory
   }
 
   return found;
@@ -59,7 +47,6 @@ function inferLanguage(markers: string[]): string | undefined {
     if (lang && lang !== 'git') {
       languages.add(lang);
     }
-    // Handle glob markers
     if (marker.endsWith('.gemspec')) languages.add('ruby');
     if (marker.endsWith('.sln') || marker.endsWith('.csproj')) languages.add('csharp');
     if (marker.endsWith('.xcodeproj') || marker.endsWith('.xcworkspace')) languages.add('swift');
@@ -70,27 +57,63 @@ function inferLanguage(markers: string[]): string | undefined {
   return languages.size > 0 ? [...languages][0] : undefined;
 }
 
-async function buildProject(dir: string, markers: string[]): Promise<Project> {
+async function findWorkspaceFile(dir: string): Promise<string | undefined> {
+  try {
+    const entries = await fs.promises.readdir(dir);
+    const wsFile = entries.find(e => e.endsWith('.code-workspace'));
+    return wsFile ? path.join(dir, wsFile) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveProjectMeta(
+  projectPath: string,
+  shelfMeta?: ShelfMeta,
+): ProjectMeta | undefined {
+  if (!shelfMeta?.projects) return undefined;
+  // Try absolute path first, then basename
+  return shelfMeta.projects[projectPath]
+    ?? shelfMeta.projects[path.basename(projectPath)];
+}
+
+async function buildProject(
+  dir: string,
+  markers: string[],
+  projectMeta?: ProjectMeta,
+): Promise<Project> {
   const stat = await fs.promises.stat(dir);
-  const manifest = await readManifest(dir);
   const gitBranch = markers.includes('.git') ? await getBranch(dir) : undefined;
+  const workspaceFile = await findWorkspaceFile(dir);
 
   return {
-    name: manifest?.name ?? path.basename(dir),
+    name: projectMeta?.name ?? path.basename(dir),
     path: dir,
     markers,
     primaryLanguage: inferLanguage(markers),
     gitBranch,
     lastModified: stat.mtimeMs,
-    poster: manifest?.poster,
-    description: manifest?.description,
+    poster: projectMeta?.poster,
+    description: projectMeta?.description,
+    workspaceFile,
   };
+}
+
+function resolveShelfMeta(
+  shelfPath: string,
+  rootMeta?: RootConfig,
+): ShelfMeta | undefined {
+  if (!rootMeta?.shelves) return undefined;
+  // Try absolute path first, then basename
+  return rootMeta.shelves[shelfPath]
+    ?? rootMeta.shelves[path.basename(shelfPath)];
 }
 
 async function scanDirectory(
   dir: string,
   maxDepth: number,
   hiddenSet: Set<string>,
+  shelfMeta?: ShelfMeta,
   currentDepth: number = 0,
 ): Promise<{ projects: Project[]; groups: { name: string; path: string; projects: Project[] }[] }> {
   const projects: Project[] = [];
@@ -113,13 +136,11 @@ async function scanDirectory(
   for (const subdir of subdirs) {
     const markers = await detectMarkers(subdir);
     if (markers.length > 0) {
-      // This is a project
-      projects.push(await buildProject(subdir, markers));
+      const pMeta = resolveProjectMeta(subdir, shelfMeta);
+      projects.push(await buildProject(subdir, markers, pMeta));
     } else if (currentDepth < maxDepth) {
-      // Not a project — scan deeper for a bookset
-      const nested = await scanDirectory(subdir, maxDepth, hiddenSet, currentDepth + 1);
+      const nested = await scanDirectory(subdir, maxDepth, hiddenSet, shelfMeta, currentDepth + 1);
       if (nested.projects.length > 0 || nested.groups.length > 0) {
-        // Flatten nested groups' projects into this group
         const allProjects = [
           ...nested.projects,
           ...nested.groups.flatMap(g => g.projects),
@@ -133,17 +154,15 @@ async function scanDirectory(
 }
 
 export async function scanRoots(
-  roots: string[],
-  hiddenPaths: string[],
+  rootsConfig: RootsConfig,
   scanDepth: number,
 ): Promise<Shelf[]> {
-  const hiddenSet = new Set(hiddenPaths.map(p => p.replace(/^~/, process.env.HOME ?? '')));
   const shelves: Shelf[] = [];
 
-  for (const root of roots) {
+  for (const [root, rootConfig] of Object.entries(rootsConfig)) {
     const expandedRoot = root.replace(/^~/, process.env.HOME ?? '');
+    const rootLabel = rootConfig.label ?? path.basename(expandedRoot);
 
-    // Each top-level subdirectory of a root becomes a shelf
     let topEntries: fs.Dirent[];
     try {
       topEntries = await fs.promises.readdir(expandedRoot, { withFileTypes: true });
@@ -153,25 +172,28 @@ export async function scanRoots(
 
     const topDirs = topEntries
       .filter(e => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.'))
-      .map(e => ({ name: e.name, path: path.join(expandedRoot, e.name) }))
-      .filter(d => !hiddenSet.has(d.path));
+      .map(e => ({ name: e.name, path: path.join(expandedRoot, e.name) }));
 
     for (const topDir of topDirs) {
-      // Check if the top-level dir itself is a project
+      const shelfMeta = resolveShelfMeta(topDir.path, rootConfig);
+
+      // Skip if explicitly hidden in shelf metadata
+      if (shelfMeta?.hidden) continue;
+
       const topMarkers = await detectMarkers(topDir.path);
       if (topMarkers.length > 0) {
-        // It's a project at the top level — add as a single-item shelf
-        const project = await buildProject(topDir.path, topMarkers);
+        const pMeta = resolveProjectMeta(topDir.path, shelfMeta);
+        const project = await buildProject(topDir.path, topMarkers, pMeta);
         shelves.push({
-          name: topDir.name,
+          name: shelfMeta?.name ?? topDir.name,
           path: topDir.path,
+          rootLabel,
           items: [{ kind: 'project', project }],
         });
         continue;
       }
 
-      // It's a directory of projects — scan it to build a shelf
-      const result = await scanDirectory(topDir.path, scanDepth - 1, hiddenSet);
+      const result = await scanDirectory(topDir.path, scanDepth - 1, new Set(), shelfMeta);
       const items: ShelfItem[] = [];
 
       for (const project of result.projects) {
@@ -187,7 +209,6 @@ export async function scanRoots(
       }
 
       if (items.length > 0) {
-        // Sort: booksets first, then projects by last modified
         items.sort((a, b) => {
           if (a.kind !== b.kind) return a.kind === 'bookset' ? -1 : 1;
           if (a.kind === 'project' && b.kind === 'project') {
@@ -196,7 +217,12 @@ export async function scanRoots(
           return 0;
         });
 
-        shelves.push({ name: topDir.name, path: topDir.path, items });
+        shelves.push({
+          name: shelfMeta?.name ?? topDir.name,
+          path: topDir.path,
+          rootLabel,
+          items,
+        });
       }
     }
   }

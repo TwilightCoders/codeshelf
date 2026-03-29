@@ -21,26 +21,69 @@
         "command": "codeshelf.open",
         "title": "Open CodeShelf",
         "category": "CodeShelf"
+      },
+      {
+        "command": "codeshelf.editSettings",
+        "title": "Edit Settings (JSON)",
+        "category": "CodeShelf"
       }
     ],
     "configuration": {
       "title": "CodeShelf",
       "properties": {
         "codeshelf.roots": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [],
-          "description": "Root directories to scan for projects"
-        },
-        "codeshelf.hidden": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [],
-          "description": "Directories to hide from the shelf"
+          "type": "object",
+          "default": {},
+          "markdownDescription": "Root directories to scan, keyed by absolute path. Each root can have a label, visibility, and per-shelf metadata.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Display label for this root"
+              },
+              "defaultVisibility": {
+                "type": "string",
+                "enum": ["show-all", "hide-all"],
+                "default": "show-all",
+                "description": "Whether to show or hide shelves by default"
+              },
+              "filter": {
+                "type": "object",
+                "properties": {
+                  "order": {
+                    "type": "string",
+                    "description": "Sort order for projects (e.g. 'modified asc', 'name desc')"
+                  }
+                }
+              },
+              "shelves": {
+                "type": "object",
+                "description": "Per-shelf overrides, keyed by absolute path or directory name",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string", "description": "Display name override" },
+                    "description": { "type": "string" },
+                    "hidden": { "type": "boolean", "description": "Hide this shelf" },
+                    "projects": {
+                      "type": "object",
+                      "description": "Per-project overrides, keyed by path or directory name",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "name": { "type": "string" },
+                          "description": { "type": "string" },
+                          "poster": { "type": "string" },
+                          "tags": { "type": "array", "items": { "type": "string" } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         },
         "codeshelf.scanDepth": {
           "type": "number",

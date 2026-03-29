@@ -1,10 +1,50 @@
 import * as vscode from 'vscode';
-import { ExtToWebview, WebviewToExt, Shelf } from '../shared/types';
+import { ExtToWebview, WebviewToExt, Shelf, ScanDiff, RootsConfig } from '../shared/types';
 import { scanRoots } from '../services/projectScanner';
+
+function collectProjectPaths(shelves: Shelf[]): Set<string> {
+  const paths = new Set<string>();
+  for (const shelf of shelves) {
+    for (const item of shelf.items) {
+      if (item.kind === 'project') {
+        paths.add(item.project.path);
+      } else {
+        for (const p of item.projects) {
+          paths.add(p.path);
+        }
+      }
+    }
+  }
+  return paths;
+}
+
+function computeDiff(oldShelves: Shelf[], newShelves: Shelf[]): ScanDiff {
+  const oldPaths = collectProjectPaths(oldShelves);
+  const newPaths = collectProjectPaths(newShelves);
+  let added = 0;
+  let removed = 0;
+  for (const p of newPaths) {
+    if (!oldPaths.has(p)) added++;
+  }
+  for (const p of oldPaths) {
+    if (!newPaths.has(p)) removed++;
+  }
+  return { added, removed, changed: added > 0 || removed > 0 };
+}
+
+function getConfig() {
+  const config = vscode.workspace.getConfiguration('codeshelf');
+  return {
+    roots: config.get<RootsConfig>('roots', {}),
+    scanDepth: config.get<number>('scanDepth', 3),
+    openInNewWindow: config.get<boolean>('openInNewWindow', false),
+  };
+}
 
 export class CodeShelfPanel {
   public static readonly viewType = 'codeshelf.startPage';
   private static instance: CodeShelfPanel | undefined;
+  private static readonly CACHE_KEY = 'codeshelf.cachedShelves';
 
   private readonly panel: vscode.WebviewPanel;
   private readonly context: vscode.ExtensionContext;
@@ -43,7 +83,18 @@ export class CodeShelfPanel {
       },
     );
 
+    panel.iconPath = {
+      light: vscode.Uri.joinPath(context.extensionUri, 'media', 'icons', 'codeshelf-light.svg'),
+      dark: vscode.Uri.joinPath(context.extensionUri, 'media', 'icons', 'codeshelf-dark.svg'),
+    };
+
     CodeShelfPanel.instance = new CodeShelfPanel(panel, context);
+  }
+
+  public static openSettings() {
+    vscode.commands.executeCommand('workbench.action.openSettingsJson', {
+      revealSetting: { key: 'codeshelf' },
+    });
   }
 
   private postMessage(msg: ExtToWebview) {
@@ -59,10 +110,10 @@ export class CodeShelfPanel {
         await this.scan();
         break;
       case 'project:open': {
-        const uri = vscode.Uri.file(msg.path);
-        const config = vscode.workspace.getConfiguration('codeshelf');
-        const newWindow = config.get<boolean>('openInNewWindow', false);
-        await vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: newWindow });
+        const target = msg.workspaceFile ?? msg.path;
+        const uri = vscode.Uri.file(target);
+        const { openInNewWindow } = getConfig();
+        await vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: openInNewWindow });
         break;
       }
       case 'settings:pickRoot': {
@@ -74,90 +125,61 @@ export class CodeShelfPanel {
           title: 'Choose the root directory where your projects live',
         });
         if (picked && picked.length > 0) {
-          const rootPath = picked[0].fsPath;
-          const config = vscode.workspace.getConfiguration('codeshelf');
-          const roots = config.get<string[]>('roots', []);
-          if (!roots.includes(rootPath)) {
-            roots.push(rootPath);
-            await config.update('roots', roots, vscode.ConfigurationTarget.Global);
-          }
-          await this.scan();
+          await this.addRoot(picked[0].fsPath);
         }
         break;
       }
       case 'settings:addRoot': {
-        const config = vscode.workspace.getConfiguration('codeshelf');
-        const roots = config.get<string[]>('roots', []);
-        if (!roots.includes(msg.path)) {
-          roots.push(msg.path);
-          await config.update('roots', roots, vscode.ConfigurationTarget.Global);
-        }
-        await this.scan();
+        await this.addRoot(msg.path);
         break;
       }
-      case 'project:editManifest': {
-        const manifestPath = vscode.Uri.file(
-          require('path').join(msg.path, '.codeshelf.json'),
-        );
-        try {
-          await vscode.workspace.fs.stat(manifestPath);
-        } catch {
-          // Create default manifest if it doesn't exist
-          const defaultManifest = JSON.stringify({
-            name: require('path').basename(msg.path),
-            description: '',
-            poster: '',
-            tags: [],
-          }, null, 2) + '\n';
-          await vscode.workspace.fs.writeFile(manifestPath, Buffer.from(defaultManifest));
-        }
-        await vscode.commands.executeCommand('vscode.open', manifestPath);
-        break;
-      }
-      case 'settings:openConfig': {
+      case 'item:editMeta': {
         await vscode.commands.executeCommand(
           'workbench.action.openSettings',
-          'codeshelf',
+          'codeshelf.roots',
         );
         break;
       }
     }
   }
 
-  private static readonly CACHE_KEY = 'codeshelf.cachedShelves';
+  private async addRoot(rootPath: string) {
+    const config = vscode.workspace.getConfiguration('codeshelf');
+    const roots = config.get<RootsConfig>('roots', {});
+    if (!roots[rootPath]) {
+      roots[rootPath] = {};
+      await config.update('roots', roots, vscode.ConfigurationTarget.Global);
+    }
+    await this.scan();
+  }
 
   private async onReady() {
-    const config = vscode.workspace.getConfiguration('codeshelf');
-    const roots = config.get<string[]>('roots', []);
-    this.postMessage({ type: 'settings:state', hasRoots: roots.length > 0 });
+    const { roots } = getConfig();
+    const hasRoots = Object.keys(roots).length > 0;
+    this.postMessage({ type: 'settings:state', hasRoots });
 
-    if (roots.length > 0) {
-      // Show cached data immediately if available
+    if (hasRoots) {
       const cached = this.context.globalState.get<Shelf[]>(CodeShelfPanel.CACHE_KEY);
       if (cached && cached.length > 0) {
         this.postMessage({ type: 'projects:loaded', shelves: cached });
       }
-      // Then rescan in background and update
       await this.scan();
     }
   }
 
   private async scan() {
-    const config = vscode.workspace.getConfiguration('codeshelf');
-    const roots = config.get<string[]>('roots', []);
-    const hidden = config.get<string[]>('hidden', []);
-    const depth = config.get<number>('scanDepth', 3);
+    const { roots, scanDepth } = getConfig();
 
-    // Only show scanning indicator if we have no cached data
     const cached = this.context.globalState.get<Shelf[]>(CodeShelfPanel.CACHE_KEY);
     if (!cached || cached.length === 0) {
       this.postMessage({ type: 'projects:scanning', scanning: true });
     }
 
-    const shelves: Shelf[] = await scanRoots(roots, hidden, depth);
+    const shelves: Shelf[] = await scanRoots(roots, scanDepth);
+    const diff = cached ? computeDiff(cached, shelves) : undefined;
     await this.context.globalState.update(CodeShelfPanel.CACHE_KEY, shelves);
     this.postMessage({ type: 'projects:scanning', scanning: false });
-    this.postMessage({ type: 'projects:loaded', shelves });
+    this.postMessage({ type: 'projects:loaded', shelves, diff });
   }
 
   private getHtml(): string {
@@ -201,6 +223,7 @@ export class CodeShelfPanel {
       <header class="shelf-header">
         <h1 class="shelf-logo">CodeShelf</h1>
         <div class="shelf-controls">
+          <span id="syncStatus" class="sync-status"></span>
           <div class="search-wrapper">
             <input type="text" id="searchInput" class="search-input" placeholder="Search projects..." />
             <button id="searchClear" class="search-clear" title="Clear search">&times;</button>

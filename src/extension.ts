@@ -6,6 +6,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('codeshelf.open', () => {
       CodeShelfPanel.createOrShow(context);
     }),
+    vscode.commands.registerCommand('codeshelf.editSettings', () => {
+      CodeShelfPanel.openSettings();
+    }),
   );
 
   // Auto-open when no workspace folder is open
