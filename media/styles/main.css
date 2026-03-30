@@ -804,9 +804,11 @@ body {
   padding: 8px 10px;
   font-size: 13px;
   font-family: inherit;
-  resize: none;
+  resize: vertical;
   outline: none;
   width: 100%;
+  flex: 1;
+  min-height: 80px;
 }
 
 .prompt-input:focus {
