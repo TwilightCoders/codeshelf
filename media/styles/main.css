@@ -383,9 +383,16 @@ body {
 .shelf-modal-grid {
   padding: 20px;
   overflow-y: auto;
+  flex: 1;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 16px;
+  align-content: start;
+}
+
+/* Lock body scroll when any modal is open */
+body.modal-open {
+  overflow: hidden;
 }
 
 /* ── Project card ── */
@@ -396,8 +403,7 @@ body {
   cursor: pointer;
   background: var(--vscode-sideBar-background, rgba(255,255,255,0.04));
   border: 1px solid transparent;
-  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.2s ease;
-  animation: cardIn 0.3s ease-out both;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.2s ease, opacity 0.2s ease;
 }
 
 .project-card:hover {

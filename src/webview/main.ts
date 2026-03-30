@@ -161,17 +161,20 @@ function showDetail(projectPath: string) {
   // Update generate button tooltip
   detailGenerate.title = project.poster ? 'Regenerate poster' : 'Generate poster';
 
+  document.body.classList.add('modal-open');
   detailModal.style.display = 'flex';
 }
 
 function hideDetail() {
   detailModal.style.display = 'none';
   promptEditor.style.display = 'none';
+  document.body.classList.remove('modal-open');
   activeDetailProject = null;
 }
 
 function showShelfModal(shelf: Shelf) {
   activeShelfModal = shelf;
+  document.body.classList.add('modal-open');
   shelfModalTitle.textContent = shelf.name;
   shelfModalSearch.value = '';
 
@@ -191,39 +194,49 @@ function showShelfModal(shelf: Shelf) {
 
 function hideShelfModal() {
   shelfModal.style.display = 'none';
+  document.body.classList.remove('modal-open');
   activeShelfModal = null;
 }
 
-function renderShelfModalGrid(filter: string) {
+function renderShelfModalGrid(filter: string, rebuild: boolean = true) {
   if (!activeShelfModal) return;
   const q = filter.toLowerCase().trim();
 
-  // Collect all projects from the shelf
-  let projects: Project[] = [];
-  for (const item of activeShelfModal.items) {
-    if (item.kind === 'project') {
-      projects.push(item.project);
-    } else {
-      projects.push(...item.projects);
+  if (rebuild) {
+    // Full rebuild: collect, sort, render all cards
+    const projects: Project[] = [];
+    for (const item of activeShelfModal.items) {
+      if (item.kind === 'project') {
+        projects.push(item.project);
+      } else {
+        projects.push(...item.projects);
+      }
     }
+
+    projects.sort((a, b) => {
+      if (a.starred !== b.starred) return a.starred ? -1 : 1;
+      return b.lastModified - a.lastModified;
+    });
+
+    shelfModalGrid.innerHTML = projects.length > 0
+      ? projects.map(p => renderProjectCard(p, activeShelfModal!.rootPath)).join('')
+      : '<p class="empty-state">No projects found.</p>';
+
+    // Attach handlers
+    attachShelfModalCardHandlers();
   }
 
-  // Filter
-  if (q) {
-    projects = projects.filter(p => p.name.toLowerCase().includes(q));
-  }
-
-  // Sort: starred first, then by lastModified
-  projects.sort((a, b) => {
-    if (a.starred !== b.starred) return a.starred ? -1 : 1;
-    return b.lastModified - a.lastModified;
+  // Filter: fade cards in/out without rebuilding DOM
+  shelfModalGrid.querySelectorAll('.project-card').forEach(card => {
+    const el = card as HTMLElement;
+    const name = el.querySelector('.card-name')?.textContent?.toLowerCase() ?? '';
+    const match = !q || name.includes(q);
+    el.style.opacity = match ? '1' : '0.15';
+    el.style.pointerEvents = match ? '' : 'none';
   });
+}
 
-  shelfModalGrid.innerHTML = projects.length > 0
-    ? projects.map(p => renderProjectCard(p, activeShelfModal!.rootPath)).join('')
-    : '<p class="empty-state">No projects found.</p>';
-
-  // Attach card click handlers within the modal
+function attachShelfModalCardHandlers() {
   shelfModalGrid.querySelectorAll('.project-card').forEach(card => {
     card.addEventListener('click', (e) => {
       if ((e.target as HTMLElement).closest('.action-btn')) return;
@@ -232,7 +245,6 @@ function renderShelfModalGrid(filter: string) {
     });
   });
 
-  // Card action buttons within the modal
   shelfModalGrid.querySelectorAll('.card-open-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -479,11 +491,11 @@ function renderShelf(shelf: Shelf, query: string): string {
         <span class="shelf-collapse ${arrowClass}" data-collapse-shelf="${shelf.path}">&#9656;</span>
         ${shelf.name}
         <span class="shelf-actions">
-          <input type="text" class="shelf-filter-input" data-filter-shelf="${shelf.path}" placeholder="Filter..." />
           <button class="action-btn star-btn ${shelf.starred ? 'starred' : ''}" data-star-path="${shelf.path}" data-root-path="${shelf.rootPath}" title="Star shelf"><i class="codicon codicon-star-${shelf.starred ? 'full' : 'empty'}"></i></button>
           <button class="action-btn hide-btn" data-hide-path="${shelf.path}" data-root-path="${shelf.rootPath}" title="Hide shelf"><i class="codicon codicon-eye-closed"></i></button>
           <button class="action-btn edit-btn" data-edit-path="${shelf.path}" title="Edit shelf metadata"><i class="codicon codicon-edit"></i></button>
           <button class="action-btn reveal-btn" data-reveal-path="${shelf.path}" title="Reveal in Finder"><i class="codicon codicon-folder-opened"></i></button>
+          <input type="text" class="shelf-filter-input" data-filter-shelf="${shelf.path}" placeholder="Filter..." />
         </span>
       </h3>
       <div class="shelf-row-content ${isCollapsed ? 'hidden' : ''}">${content}</div>
@@ -729,7 +741,7 @@ shelfModal.querySelector('.detail-backdrop')!.addEventListener('click', hideShel
 shelfModalClose.addEventListener('click', hideShelfModal);
 
 shelfModalSearch.addEventListener('input', () => {
-  renderShelfModalGrid(shelfModalSearch.value);
+  renderShelfModalGrid(shelfModalSearch.value, false);
 });
 
 shelfModalStar.addEventListener('click', () => {
@@ -891,18 +903,14 @@ window.addEventListener('message', (event: MessageEvent<ExtToWebview>) => {
       showSyncResult(msg.diff);
       break;
     case 'poster:generating': {
-      // Show forge animation on the card
-      const forgeCard = shelfContent.querySelector(
-        `.project-card[data-path="${CSS.escape(msg.projectPath)}"]`
-      );
-      if (forgeCard) {
-        forgeCard.classList.add('forging');
-      }
+      // Show forge animation on cards in shelf view AND shelf modal
+      const selector = `.project-card[data-path="${CSS.escape(msg.projectPath)}"]`;
+      shelfContent.querySelector(selector)?.classList.add('forging');
+      shelfModalGrid.querySelector(selector)?.classList.add('forging');
       // Also show on the detail modal if it's open for this project
       if (activeDetailProject?.project.path === msg.projectPath) {
         detailPoster.closest('.detail-poster')?.classList.add('forging');
       }
-      // Show cancel option in dropdown
       detailCancelGenerate.style.display = 'flex';
       break;
     }
@@ -911,10 +919,9 @@ window.addEventListener('message', (event: MessageEvent<ExtToWebview>) => {
       detailCancelGenerate.style.display = 'none';
 
       // Clear forge animation
-      const forgingCard = shelfContent.querySelector(
-        `.project-card.forging[data-path="${CSS.escape(msg.projectPath)}"]`
-      );
-      if (forgingCard) forgingCard.classList.remove('forging');
+      const forgingSelector = `.project-card.forging[data-path="${CSS.escape(msg.projectPath)}"]`;
+      shelfContent.querySelector(forgingSelector)?.classList.remove('forging');
+      shelfModalGrid.querySelector(forgingSelector)?.classList.remove('forging');
       if (activeDetailProject?.project.path === msg.projectPath) {
         detailPoster.closest('.detail-poster')?.classList.remove('forging');
         // Update the detail modal poster
