@@ -253,7 +253,11 @@ export class CodeShelfPanel {
   private async onReady() {
     const { roots } = getConfig();
     const hasRoots = Object.keys(roots).length > 0;
-    this.postMessage({ type: 'settings:state', hasRoots });
+    this.postMessage({
+      type: 'settings:state',
+      hasRoots,
+      booksetThreshold: vscode.workspace.getConfiguration('codeshelf').get<number>('booksetThreshold', 8),
+    });
 
     if (hasRoots) {
       const cached = this.context.globalState.get<Shelf[]>(CodeShelfPanel.CACHE_KEY);

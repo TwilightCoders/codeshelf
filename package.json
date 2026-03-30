@@ -81,6 +81,12 @@
                       "type": "boolean",
                       "description": "Star/favorite this shelf"
                     },
+                    "flatten": {
+                      "type": "string",
+                      "enum": ["auto", "always", "never"],
+                      "default": "auto",
+                      "description": "Control bookset flattening: auto (use threshold), always (force flat), never (keep booksets)"
+                    },
                     "projects": {
                       "type": "object",
                       "description": "Per-project overrides, keyed by path or directory name",
@@ -118,6 +124,11 @@
               }
             }
           }
+        },
+        "codeshelf.booksetThreshold": {
+          "type": "number",
+          "default": 8,
+          "description": "Booksets with this many or fewer total projects are flattened into the shelf grid"
         },
         "codeshelf.scanDepth": {
           "type": "number",

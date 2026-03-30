@@ -59,6 +59,7 @@ const LANGUAGE_COLORS: Record<string, string> = {
 };
 
 let allShelves: Shelf[] = [];
+let booksetThreshold = 8;
 let syncFadeTimer: ReturnType<typeof setTimeout> | undefined;
 
 // Elements
@@ -322,13 +323,38 @@ function renderShelf(shelf: Shelf, query: string): string {
 
   if (filteredItems.length === 0) return '';
 
-  const content = filteredItems.map(item => {
+  // Determine if booksets should be flattened
+  const allBooksets = filteredItems.every(i => i.kind === 'bookset');
+  const projectCount = filteredItems.reduce((n, item) =>
+    n + (item.kind === 'project' ? 1 : item.projects.length), 0);
+
+  const shouldFlatten = shelf.flatten === 'always'
+    || (shelf.flatten !== 'never' && allBooksets && projectCount <= booksetThreshold);
+
+  let displayItems: ShelfItem[];
+  if (shouldFlatten) {
+    // Flatten booksets: prefix project names with bookset name
+    displayItems = [];
+    for (const item of filteredItems) {
+      if (item.kind === 'project') {
+        displayItems.push(item);
+      } else {
+        for (const p of item.projects) {
+          displayItems.push({
+            kind: 'project',
+            project: { ...p, name: `${item.name}/${p.name}` },
+          });
+        }
+      }
+    }
+  } else {
+    displayItems = filteredItems;
+  }
+
+  const content = displayItems.map(item => {
     if (item.kind === 'project') return renderProjectCard(item.project, shelf.rootPath);
     return renderBookset(item, shelf.rootPath);
   }).join('');
-
-  const projectCount = filteredItems.reduce((n, item) =>
-    n + (item.kind === 'project' ? 1 : item.projects.length), 0);
   const isCollapsed = viewState.collapsedShelves[shelf.path] ?? false;
   const arrowClass = isCollapsed ? 'collapse-arrow collapsed' : 'collapse-arrow';
   const starredClass = shelf.starred ? 'starred-shelf' : '';
@@ -639,6 +665,7 @@ window.addEventListener('message', (event: MessageEvent<ExtToWebview>) => {
   const msg = event.data;
   switch (msg.type) {
     case 'settings:state':
+      booksetThreshold = msg.booksetThreshold;
       if (msg.hasRoots) {
         showScreen('loading');
       } else {

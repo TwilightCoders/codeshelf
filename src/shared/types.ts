@@ -18,6 +18,7 @@ export interface Shelf {
   rootLabel: string;
   rootPath: string;
   starred?: boolean;
+  flatten?: 'auto' | 'always' | 'never';
   items: ShelfItem[];
 }
 
@@ -41,6 +42,7 @@ export interface ShelfMeta {
   description?: string;
   hidden?: boolean;
   starred?: boolean;
+  flatten?: 'auto' | 'always' | 'never';
   projects?: Record<string, ProjectMeta>;
 }
 
@@ -60,7 +62,7 @@ export type RootsConfig = Record<string, RootConfig>;
 export type ExtToWebview =
   | { type: 'projects:loaded'; shelves: Shelf[]; diff?: ScanDiff }
   | { type: 'projects:scanning'; scanning: boolean }
-  | { type: 'settings:state'; hasRoots: boolean }
+  | { type: 'settings:state'; hasRoots: boolean; booksetThreshold: number }
   | { type: 'poster:generating'; projectPath: string }
   | { type: 'poster:loaded'; projectPath: string; posterUri: string };
 

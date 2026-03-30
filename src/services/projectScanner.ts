@@ -236,6 +236,7 @@ export async function scanRoots(
           rootLabel,
           rootPath: expandedRoot,
           starred: shelfMeta?.starred,
+          flatten: shelfMeta?.flatten,
           items,
         });
       }
