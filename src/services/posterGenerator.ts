@@ -51,17 +51,21 @@ export class PosterGenerator {
 
   public static buildDefaultPrompt(project: Project): string {
     const lang = project.primaryLanguage ?? 'software';
+    const markers = project.markers.filter(m => m !== '.git').join(', ');
     const parts = [
-      `Explore the project at "${project.path}".`,
-      `Read the README.md if it exists, and any other files that help you understand the project.`,
-      `Then generate a minimal, elegant SVG poster/cover image for this ${lang} project called "${project.name}".`,
+      `Generate a minimal, elegant SVG poster/cover image for a ${lang} project called "${project.name}".`,
       `The SVG must be exactly 400x240 pixels.`,
-      `Use a dark background with subtle geometric elements and the project name.`,
+      `Use a dark background with subtle geometric elements and the project name prominently displayed.`,
       `The design should feel modern and technical, like a Steam game library card.`,
-      `Let the project's purpose and personality inform the visual design.`,
     ];
     if (project.description) {
       parts.push(`Project description: ${project.description}`);
+    }
+    if (markers) {
+      parts.push(`Project files detected: ${markers}`);
+    }
+    if (project.gitBranch) {
+      parts.push(`Current branch: ${project.gitBranch}`);
     }
     return parts.join(' ');
   }
@@ -93,14 +97,16 @@ export class PosterGenerator {
 
     const fullPrompt = [
       userPrompt,
-      'Output ONLY the raw SVG markup, nothing else. No markdown fences, no explanation.',
-      'Start with <svg and end with </svg>.',
+      'CRITICAL: Output ONLY the raw SVG markup directly to stdout.',
+      'Do NOT create any files. Do NOT use any tools. Do NOT write to disk.',
+      'Do NOT wrap in markdown code fences. No explanation before or after.',
+      'Your entire response must start with <svg and end with </svg>.',
     ].join(' ');
 
     try {
       const { stdout } = await execFileAsync(
         this.capabilities.claudeCliPath,
-        ['-p', fullPrompt, '--output-format', 'text'],
+        ['-p', fullPrompt, '--output-format', 'text', '--max-turns', '1'],
         {
           timeout: 120000,
           maxBuffer: 1024 * 512,
