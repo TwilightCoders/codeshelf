@@ -305,10 +305,36 @@ function ShelfRow({ shelf, query }: { shelf: Shelf; query: string }) {
   const isCompact = filtered.length <= 3;
 
   return (
-    <section className={`shelf-row ${collapsed ? 'collapsed' : ''} ${isCompact ? 'shelf-compact' : ''} ${shelf.starred ? 'starred-shelf' : ''}`}>
+    <section className={`shelf-row ${collapsed ? 'collapsed' : ''} ${isCompact ? 'shelf-compact' : ''} ${shelf.starred ? 'starred-shelf' : ''}`} data-shelf-path={shelf.path}>
       <h3 className="shelf-row-title">
         <span className={`collapse-arrow ${collapsed ? 'collapsed' : ''}`} onClick={() => setCollapsed(!collapsed)}>&#9656;</span>
         {shelf.name}
+        <span className="shelf-actions">
+          <button className={`action-btn star-btn ${shelf.starred ? 'starred' : ''}`} title="Star shelf" onClick={e => {
+            e.stopPropagation();
+            postMsg({ type: 'item:star', path: shelf.path, rootPath: shelf.rootPath, starred: !shelf.starred });
+          }}>
+            <i className={`codicon codicon-star-${shelf.starred ? 'full' : 'empty'}`} />
+          </button>
+          <button className="action-btn hide-btn" title="Hide shelf" onClick={e => {
+            e.stopPropagation();
+            postMsg({ type: 'item:hide', path: shelf.path, rootPath: shelf.rootPath, hidden: true });
+          }}>
+            <i className="codicon codicon-eye-closed" />
+          </button>
+          <button className="action-btn edit-btn" title="Edit shelf metadata" onClick={e => {
+            e.stopPropagation();
+            postMsg({ type: 'item:editMeta', path: shelf.path });
+          }}>
+            <i className="codicon codicon-edit" />
+          </button>
+          <button className="action-btn reveal-btn" title="Reveal in Finder" onClick={e => {
+            e.stopPropagation();
+            postMsg({ type: 'folder:reveal', path: shelf.path });
+          }}>
+            <i className="codicon codicon-folder-opened" />
+          </button>
+        </span>
       </h3>
       {!collapsed && (
         <div className="shelf-row-content">
