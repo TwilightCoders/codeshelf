@@ -222,23 +222,42 @@ export async function scanRoots(
       }
 
       if (items.length > 0) {
-        items.sort((a, b) => {
-          if (a.kind !== b.kind) return a.kind === 'bookset' ? -1 : 1;
-          if (a.kind === 'project' && b.kind === 'project') {
-            return b.project.lastModified - a.project.lastModified;
-          }
-          return 0;
-        });
+        // Count total projects across all items
+        const totalProjects = items.reduce((n, item) =>
+          n + (item.kind === 'project' ? 1 : item.projects.length), 0);
 
-        shelves.push({
-          name: shelfMeta?.name ?? topDir.name,
-          path: topDir.path,
-          rootLabel,
-          rootPath: expandedRoot,
-          starred: shelfMeta?.starred,
-          flatten: shelfMeta?.flatten,
-          items,
-        });
+        // Single-project shelves get absorbed into loose projects
+        if (totalProjects === 1) {
+          for (const item of items) {
+            if (item.kind === 'project') {
+              const prefixed = { ...item.project, name: `${topDir.name}/${item.project.name}` };
+              looseProjects.push({ kind: 'project', project: prefixed });
+            } else {
+              for (const p of item.projects) {
+                const prefixed = { ...p, name: `${topDir.name}/${p.name}` };
+                looseProjects.push({ kind: 'project', project: prefixed });
+              }
+            }
+          }
+        } else {
+          items.sort((a, b) => {
+            if (a.kind !== b.kind) return a.kind === 'bookset' ? -1 : 1;
+            if (a.kind === 'project' && b.kind === 'project') {
+              return b.project.lastModified - a.project.lastModified;
+            }
+            return 0;
+          });
+
+          shelves.push({
+            name: shelfMeta?.name ?? topDir.name,
+            path: topDir.path,
+            rootLabel,
+            rootPath: expandedRoot,
+            starred: shelfMeta?.starred,
+            flatten: shelfMeta?.flatten,
+            items,
+          });
+        }
       }
     }
 
