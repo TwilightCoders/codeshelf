@@ -156,7 +156,7 @@ export class CodeShelfPanel {
         break;
       }
       case 'poster:generate': {
-        await this.generatePoster(msg.projectPath, msg.prompt);
+        await this.generatePoster(msg.projectPath);
         break;
       }
       case 'poster:attach': {
@@ -270,7 +270,7 @@ export class CodeShelfPanel {
     return undefined;
   }
 
-  private async generatePoster(projectPath: string, existingPrompt?: string) {
+  private async generatePoster(projectPath: string) {
     await this.ensurePosterGenerator();
     if (!this.posterGenerator) {
       vscode.window.showErrorMessage('CodeShelf: No poster generation method available. Install the Claude CLI to generate posters.');
@@ -280,16 +280,14 @@ export class CodeShelfPanel {
     const project = this.findProject(projectPath);
     if (!project) return;
 
-    const defaultPrompt = existingPrompt ?? PosterGenerator.buildDefaultPrompt(project);
-
-    const prompt = await vscode.window.showInputBox({
+    const userNotes = await vscode.window.showInputBox({
       title: 'Generate Poster',
-      prompt: 'Edit the prompt for poster generation, then press Enter',
-      value: defaultPrompt,
+      prompt: 'Optional: add notes to guide the design (leave empty for default)',
+      placeHolder: 'e.g. "use blue tones", "include a rocket icon", "minimalist"',
       ignoreFocusOut: true,
     });
 
-    if (!prompt) return; // cancelled
+    if (userNotes === undefined) return; // cancelled (Escape)
 
     // Signal the webview to show the forge animation
     this.postMessage({ type: 'poster:generating', projectPath });
@@ -301,7 +299,7 @@ export class CodeShelfPanel {
         await require('fs').promises.unlink(existingPath).catch(() => {});
       }
 
-      await this.posterGenerator.generateOne(project, prompt);
+      await this.posterGenerator.generateOne(project, userNotes || undefined);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       vscode.window.showErrorMessage(`CodeShelf: Failed to generate poster — ${msg}`);

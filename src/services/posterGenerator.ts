@@ -53,27 +53,37 @@ export class PosterGenerator {
     const lang = project.primaryLanguage ?? 'software';
     const markers = project.markers.filter(m => m !== '.git').join(', ');
     const parts = [
-      `Generate a minimal, elegant SVG poster/cover image for a ${lang} project called "${project.name}".`,
-      `The SVG must be exactly 400x240 pixels.`,
-      `Use a dark background with subtle geometric elements and the project name prominently displayed.`,
-      `The design should feel modern and technical, like a Steam game library card.`,
+      `A poster for a ${lang} project called "${project.name}".`,
+      `Dark background, subtle geometric elements, project name prominent.`,
+      `Modern technical style, like a Steam game library card.`,
     ];
     if (project.description) {
-      parts.push(`Project description: ${project.description}`);
+      parts.push(`Description: ${project.description}`);
     }
     if (markers) {
-      parts.push(`Project files detected: ${markers}`);
-    }
-    if (project.gitBranch) {
-      parts.push(`Current branch: ${project.gitBranch}`);
+      parts.push(`Tech: ${markers}`);
     }
     return parts.join(' ');
   }
 
-  public async generateOne(project: Project, userPrompt: string): Promise<void> {
+  private static readonly SYSTEM_WRAPPER = [
+    'You are a graphic designer generating SVG poster artwork.',
+    'The user will describe what they want. You produce the SVG.',
+    '',
+    'RULES:',
+    '- Output ONLY raw SVG markup. Nothing else.',
+    '- SVG must be exactly 400x240 pixels (width="400" height="240").',
+    '- Do NOT create files, use tools, or write to disk.',
+    '- Do NOT wrap in markdown code fences.',
+    '- Do NOT include any explanation before or after the SVG.',
+    '- Your entire response starts with <svg and ends with </svg>.',
+  ].join('\n');
+
+  public async generateOne(project: Project, userNotes?: string): Promise<void> {
     await this.ensureCacheDir();
 
-    const svg = await this.runGeneration(userPrompt, project.path);
+    const projectPrompt = PosterGenerator.buildDefaultPrompt(project);
+    const svg = await this.runGeneration(projectPrompt, userNotes, project.path);
     if (svg) {
       const posterFile = this.posterPath(project);
       await fs.promises.writeFile(posterFile, svg);
@@ -83,30 +93,28 @@ export class PosterGenerator {
     }
   }
 
-  private async runGeneration(prompt: string, cwd?: string): Promise<string | undefined> {
+  private async runGeneration(projectPrompt: string, userNotes: string | undefined, cwd?: string): Promise<string | undefined> {
     switch (this.capabilities.bestMethod) {
       case 'claude-cli':
-        return this.generateViaClaude(prompt, cwd);
+        return this.generateViaClaude(projectPrompt, userNotes, cwd);
       default:
         return undefined;
     }
   }
 
-  private async generateViaClaude(userPrompt: string, cwd?: string): Promise<string | undefined> {
+  private async generateViaClaude(projectPrompt: string, userNotes: string | undefined, cwd?: string): Promise<string | undefined> {
     if (!this.capabilities.claudeCliPath) return undefined;
 
-    const fullPrompt = [
-      userPrompt,
-      'CRITICAL: Output ONLY the raw SVG markup directly to stdout.',
-      'Do NOT create any files. Do NOT use any tools. Do NOT write to disk.',
-      'Do NOT wrap in markdown code fences. No explanation before or after.',
-      'Your entire response must start with <svg and end with </svg>.',
-    ].join(' ');
+    const parts = [projectPrompt];
+    if (userNotes) {
+      parts.push(`\nAdditional notes: ${userNotes}`);
+    }
+    const fullPrompt = parts.join('\n');
 
     try {
       const { stdout } = await execFileAsync(
         this.capabilities.claudeCliPath,
-        ['-p', fullPrompt, '--output-format', 'text', '--max-turns', '1'],
+        ['-p', fullPrompt, '--output-format', 'text', '--max-turns', '1', '--system-prompt', PosterGenerator.SYSTEM_WRAPPER],
         {
           timeout: 120000,
           maxBuffer: 1024 * 512,

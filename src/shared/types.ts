@@ -78,7 +78,7 @@ export type WebviewToExt =
   | { type: 'item:editMeta'; path: string }
   | { type: 'item:hide'; path: string; rootPath: string }
   | { type: 'item:star'; path: string; rootPath: string; starred: boolean }
-  | { type: 'poster:generate'; projectPath: string; prompt?: string }
+  | { type: 'poster:generate'; projectPath: string }
   | { type: 'poster:attach'; projectPath: string }
   | { type: 'folder:reveal'; path: string }
   | { type: 'project:showDetail'; path: string }
