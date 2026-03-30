@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { Project } from '../shared/types';
+import { POSTER_SYSTEM_PROMPT, buildPosterPrompt } from '../shared/constants';
 import { Capabilities } from './capabilities';
 
 const execFileAsync = promisify(execFile);
@@ -49,40 +50,16 @@ export class PosterGenerator {
     }
   }
 
-  public static buildDefaultPrompt(project: Project): string {
+  public static getProjectPrompt(project: Project): string {
     const lang = project.primaryLanguage ?? 'software';
     const markers = project.markers.filter(m => m !== '.git').join(', ');
-    const parts = [
-      `A poster for a ${lang} project called "${project.name}".`,
-      `Dark background, subtle geometric elements, project name prominent.`,
-      `Modern technical style, like a Steam game library card.`,
-    ];
-    if (project.description) {
-      parts.push(`Description: ${project.description}`);
-    }
-    if (markers) {
-      parts.push(`Tech: ${markers}`);
-    }
-    return parts.join(' ');
+    return buildPosterPrompt(project.name, lang, markers);
   }
-
-  private static readonly SYSTEM_WRAPPER = [
-    'You are a graphic designer generating SVG poster artwork.',
-    'The user will describe what they want. You produce the SVG.',
-    '',
-    'RULES:',
-    '- Output ONLY raw SVG markup. Nothing else.',
-    '- SVG must be exactly 400x240 pixels (width="400" height="240").',
-    '- Do NOT create files, use tools, or write to disk.',
-    '- Do NOT wrap in markdown code fences.',
-    '- Do NOT include any explanation before or after the SVG.',
-    '- Your entire response starts with <svg and ends with </svg>.',
-  ].join('\n');
 
   public async generateOne(project: Project, userNotes?: string): Promise<void> {
     await this.ensureCacheDir();
 
-    const projectPrompt = PosterGenerator.buildDefaultPrompt(project);
+    const projectPrompt = PosterGenerator.getProjectPrompt(project);
     const svg = await this.runGeneration(projectPrompt, userNotes, project.path);
     if (svg) {
       const posterFile = this.posterPath(project);
@@ -114,7 +91,7 @@ export class PosterGenerator {
     try {
       const { stdout } = await execFileAsync(
         this.capabilities.claudeCliPath,
-        ['-p', fullPrompt, '--output-format', 'text', '--max-turns', '1', '--system-prompt', PosterGenerator.SYSTEM_WRAPPER],
+        ['-p', fullPrompt, '--output-format', 'text', '--max-turns', '1', '--system-prompt', POSTER_SYSTEM_PROMPT],
         {
           timeout: 120000,
           maxBuffer: 1024 * 512,

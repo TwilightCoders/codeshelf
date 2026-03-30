@@ -156,7 +156,7 @@ export class CodeShelfPanel {
         break;
       }
       case 'poster:generate': {
-        await this.generatePoster(msg.projectPath);
+        await this.generatePoster(msg.projectPath, msg.userNotes);
         break;
       }
       case 'poster:attach': {
@@ -270,7 +270,7 @@ export class CodeShelfPanel {
     return undefined;
   }
 
-  private async generatePoster(projectPath: string) {
+  private async generatePoster(projectPath: string, userNotes?: string) {
     await this.ensurePosterGenerator();
     if (!this.posterGenerator) {
       vscode.window.showErrorMessage('CodeShelf: No poster generation method available. Install the Claude CLI to generate posters.');
@@ -279,15 +279,6 @@ export class CodeShelfPanel {
 
     const project = this.findProject(projectPath);
     if (!project) return;
-
-    const userNotes = await vscode.window.showInputBox({
-      title: 'Generate Poster',
-      prompt: 'Optional: add notes to guide the design (leave empty for default)',
-      placeHolder: 'e.g. "use blue tones", "include a rocket icon", "minimalist"',
-      ignoreFocusOut: true,
-    });
-
-    if (userNotes === undefined) return; // cancelled (Escape)
 
     // Signal the webview to show the forge animation
     this.postMessage({ type: 'poster:generating', projectPath });
@@ -528,6 +519,16 @@ export class CodeShelfPanel {
           <button class="btn btn-primary detail-open" id="detailOpen">
             <i class="codicon codicon-folder-opened"></i> Open Project
           </button>
+        </div>
+        <!-- Prompt editor (shown when generating) -->
+        <div class="prompt-editor" id="promptEditor" style="display:none">
+          <div class="prompt-section prompt-pre" id="promptPre"></div>
+          <textarea class="prompt-input" id="promptInput" rows="2" placeholder="Optional: your notes here..."></textarea>
+          <div class="prompt-section prompt-post" id="promptPost"></div>
+          <div class="prompt-actions">
+            <button class="btn btn-primary" id="promptSubmit"><i class="codicon codicon-sparkle"></i> Generate</button>
+            <button class="btn btn-ghost" id="promptCancel">Cancel</button>
+          </div>
         </div>
       </div>
     </div>

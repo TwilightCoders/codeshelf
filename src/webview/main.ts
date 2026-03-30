@@ -1,4 +1,5 @@
 import { ExtToWebview, WebviewToExt, Shelf, ShelfItem, Project, ScanDiff } from '../shared/types';
+import { POSTER_SYSTEM_PROMPT, buildPosterPrompt } from '../shared/constants';
 
 declare function acquireVsCodeApi(): {
   postMessage(msg: WebviewToExt): void;
@@ -82,6 +83,12 @@ const detailOpen = document.getElementById('detailOpen')!;
 const detailGenerate = document.getElementById('detailGenerate')!;
 const detailAttach = document.getElementById('detailAttach')!;
 const walkthroughBtn = document.getElementById('walkthroughBtn')!;
+const promptEditor = document.getElementById('promptEditor')!;
+const promptPre = document.getElementById('promptPre')!;
+const promptPost = document.getElementById('promptPost')!;
+const promptInput = document.getElementById('promptInput') as HTMLTextAreaElement;
+const promptSubmit = document.getElementById('promptSubmit')!;
+const promptCancel = document.getElementById('promptCancel')!;
 
 let activeDetailProject: { project: Project; rootPath: string } | null = null;
 
@@ -143,7 +150,24 @@ function showDetail(projectPath: string) {
 
 function hideDetail() {
   detailModal.style.display = 'none';
+  promptEditor.style.display = 'none';
   activeDetailProject = null;
+}
+
+function showPromptEditor(project: Project) {
+  const lang = project.primaryLanguage ?? 'software';
+  const markers = project.markers.filter(m => m !== '.git').join(', ');
+
+  promptPre.textContent = buildPosterPrompt(project.name, lang, markers);
+  promptPost.textContent = POSTER_SYSTEM_PROMPT;
+
+  promptInput.value = '';
+  promptEditor.style.display = 'flex';
+  promptInput.focus();
+}
+
+function hidePromptEditor() {
+  promptEditor.style.display = 'none';
 }
 
 function showSyncStatus(text: string, persistent: boolean = false) {
@@ -503,10 +527,22 @@ detailOpen.addEventListener('click', () => {
 
 detailGenerate.addEventListener('click', () => {
   if (!activeDetailProject) return;
+  showPromptEditor(activeDetailProject.project);
+});
+
+promptSubmit.addEventListener('click', () => {
+  if (!activeDetailProject) return;
+  const notes = promptInput.value.trim() || undefined;
+  hidePromptEditor();
   vscode.postMessage({
     type: 'poster:generate',
     projectPath: activeDetailProject.project.path,
+    userNotes: notes,
   });
+});
+
+promptCancel.addEventListener('click', () => {
+  hidePromptEditor();
 });
 
 detailAttach.addEventListener('click', () => {
