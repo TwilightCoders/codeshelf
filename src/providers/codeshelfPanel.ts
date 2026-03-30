@@ -47,6 +47,7 @@ export class CodeShelfPanel {
   public static readonly viewType = 'codeshelf.startPage';
   private static instance: CodeShelfPanel | undefined;
   private static readonly CACHE_KEY = 'codeshelf.cachedShelves';
+  private static readonly PROMPTS_KEY = 'codeshelf.posterPrompts';
 
   private readonly panel: vscode.WebviewPanel;
   private readonly context: vscode.ExtensionContext;
@@ -291,6 +292,10 @@ export class CodeShelfPanel {
       }
 
       await this.posterGenerator.generateOne(project, userNotes || undefined);
+      // Save the prompt used
+      const prompts = this.context.globalState.get<Record<string, string>>(CodeShelfPanel.PROMPTS_KEY, {});
+      prompts[projectPath] = userNotes || '';
+      await this.context.globalState.update(CodeShelfPanel.PROMPTS_KEY, prompts);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       vscode.window.showErrorMessage(`CodeShelf: Failed to generate poster — ${msg}`);
@@ -402,6 +407,7 @@ export class CodeShelfPanel {
   private async applyPosterCache(shelves: Shelf[]) {
     if (!this.posterGenerator) return;
     const gen = this.posterGenerator;
+    const prompts = this.context.globalState.get<Record<string, string>>(CodeShelfPanel.PROMPTS_KEY, {});
     for (const shelf of shelves) {
       for (const item of shelf.items) {
         if (item.kind === 'project') {
@@ -409,11 +415,17 @@ export class CodeShelfPanel {
           if (cached) {
             item.project.poster = await this.readSvg(cached);
           }
+          if (prompts[item.project.path] !== undefined) {
+            item.project.posterPrompt = prompts[item.project.path];
+          }
         } else {
           for (const p of item.projects) {
             const cached = gen.getCachedPosterPath(p);
             if (cached) {
               p.poster = await this.readSvg(cached);
+            }
+            if (prompts[p.path] !== undefined) {
+              p.posterPrompt = prompts[p.path];
             }
           }
         }

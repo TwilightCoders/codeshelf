@@ -6,6 +6,7 @@ export interface Project {
   gitBranch?: string;
   lastModified: number;
   poster?: string;
+  posterPrompt?: string;
   description?: string;
   workspaceFile?: string;
   starred?: boolean;

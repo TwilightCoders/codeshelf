@@ -173,7 +173,7 @@ function showPromptEditor(project: Project) {
     'Response starts with <svg, ends with </svg>.',
   ].join('\n');
 
-  promptInput.value = '';
+  promptInput.value = project.posterPrompt ?? '';
   promptEditor.style.display = 'flex';
   promptInput.focus();
 }
