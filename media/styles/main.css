@@ -232,8 +232,8 @@ body {
   border-radius: 6px;
   padding: 16px;
   display: flex;
-  flex-direction: column;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
 .root-shelves.hidden {
@@ -262,6 +262,16 @@ body {
 .shelf-row {
   display: flex;
   flex-direction: column;
+  width: 100%;
+}
+
+/* Compact shelves (few items) flow inline */
+.shelf-row.shelf-compact {
+  width: auto;
+  flex: 0 1 auto;
+  border: 1px solid var(--vscode-panel-border, rgba(255,255,255,0.08));
+  border-radius: 6px;
+  padding: 12px;
 }
 
 .shelf-row-title {

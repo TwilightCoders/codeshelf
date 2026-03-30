@@ -327,12 +327,14 @@ function renderShelf(shelf: Shelf, query: string): string {
     return renderBookset(item, shelf.rootPath);
   }).join('');
 
+  const projectCount = filteredItems.reduce((n, item) =>
+    n + (item.kind === 'project' ? 1 : item.projects.length), 0);
   const isCollapsed = viewState.collapsedShelves[shelf.path] ?? false;
   const arrowClass = isCollapsed ? 'collapse-arrow collapsed' : 'collapse-arrow';
   const starredClass = shelf.starred ? 'starred-shelf' : '';
 
   return `
-    <section class="shelf-row ${isCollapsed ? 'collapsed' : ''} ${starredClass}" data-shelf-path="${shelf.path}">
+    <section class="shelf-row ${isCollapsed ? 'collapsed' : ''} ${starredClass} ${projectCount <= 3 ? 'shelf-compact' : ''}" data-shelf-path="${shelf.path}">
       <h3 class="shelf-row-title">
         <span class="shelf-collapse ${arrowClass}" data-collapse-shelf="${shelf.path}">&#9656;</span>
         ${shelf.name}
