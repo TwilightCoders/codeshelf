@@ -160,6 +160,18 @@ export class CodeShelfPanel {
         await this.generatePoster(msg.projectPath, msg.userNotes);
         break;
       }
+      case 'poster:cancel': {
+        if (this.posterGenerator) {
+          this.posterGenerator.cancel();
+          // Clear forge animation
+          this.postMessage({
+            type: 'poster:loaded',
+            projectPath: msg.projectPath,
+            posterUri: '',
+          });
+        }
+        break;
+      }
       case 'poster:attach': {
         await this.attachPoster(msg.projectPath);
         break;
@@ -521,11 +533,12 @@ export class CodeShelfPanel {
         <div class="detail-poster">
           <div class="detail-poster-content" id="detailPoster"></div>
           <div class="detail-poster-btn-group">
-            <button class="detail-poster-btn detail-generate-btn" id="detailGenerate" title="Regenerate poster"><i class="codicon codicon-sparkle"></i></button>
-            <button class="detail-poster-btn detail-generate-menu" id="detailGenerateMenu" title="Options"><i class="codicon codicon-chevron-down"></i></button>
+            <button class="detail-poster-btn detail-generate-btn" id="detailGenerateMenu" title="Poster options"><i class="codicon codicon-sparkle"></i></button>
             <div class="detail-generate-dropdown" id="detailGenerateDropdown" style="display:none">
-              <button class="dropdown-item" id="detailGenerateWithPrompt"><i class="codicon codicon-edit"></i> Regenerate with prompt</button>
-              <button class="dropdown-item" id="detailAttach"><i class="codicon codicon-file-media"></i> Attach custom poster</button>
+              <button class="dropdown-item" id="detailGenerate"><i class="codicon codicon-sparkle"></i> Generate poster</button>
+              <button class="dropdown-item" id="detailGenerateWithPrompt"><i class="codicon codicon-edit"></i> Generate with prompt</button>
+              <button class="dropdown-item" id="detailAttach"><i class="codicon codicon-file-media"></i> Attach custom image</button>
+              <button class="dropdown-item" id="detailCancelGenerate" style="display:none"><i class="codicon codicon-close"></i> Cancel generation</button>
             </div>
           </div>
           <button class="detail-poster-btn detail-close" title="Close"><i class="codicon codicon-close"></i></button>

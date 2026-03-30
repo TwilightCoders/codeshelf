@@ -2,12 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { Project } from '../shared/types';
 import { POSTER_SYSTEM_PROMPT, buildPosterPrompt } from '../shared/constants';
 import { Capabilities } from './capabilities';
 
-const execFileAsync = promisify(execFile);
 
 export interface PosterResult {
   projectPath: string;
@@ -20,6 +18,7 @@ export class PosterGenerator {
   private cacheDir: string;
   private capabilities: Capabilities;
   private onPoster: PosterCallback;
+  private activeProcess: ReturnType<typeof execFile> | null = null;
 
   constructor(
     context: vscode.ExtensionContext,
@@ -56,6 +55,17 @@ export class PosterGenerator {
     return buildPosterPrompt(project.name, lang, markers);
   }
 
+  public cancel() {
+    if (this.activeProcess) {
+      this.activeProcess.kill();
+      this.activeProcess = null;
+    }
+  }
+
+  public get isGenerating(): boolean {
+    return this.activeProcess !== null;
+  }
+
   public async generateOne(project: Project, userNotes?: string): Promise<void> {
     await this.ensureCacheDir();
 
@@ -89,16 +99,23 @@ export class PosterGenerator {
     const fullPrompt = parts.join('\n');
 
     try {
-      const { stdout } = await execFileAsync(
-        this.capabilities.claudeCliPath,
-        ['-p', fullPrompt, '--output-format', 'text', '--max-turns', '1', '--system-prompt', POSTER_SYSTEM_PROMPT],
-        {
-          timeout: 120000,
-          maxBuffer: 1024 * 512,
-          cwd: cwd ?? undefined,
-          env: { ...process.env },
-        },
-      );
+      const stdout = await new Promise<string>((resolve, reject) => {
+        this.activeProcess = execFile(
+          this.capabilities.claudeCliPath!,
+          ['-p', fullPrompt, '--output-format', 'text', '--max-turns', '1', '--system-prompt', POSTER_SYSTEM_PROMPT],
+          {
+            timeout: 120000,
+            maxBuffer: 1024 * 512,
+            cwd: cwd ?? undefined,
+            env: { ...process.env },
+          },
+          (err, stdout) => {
+            this.activeProcess = null;
+            if (err) reject(err);
+            else resolve(stdout);
+          },
+        );
+      });
 
       const svg = stdout.trim();
       if (svg.startsWith('<svg') && svg.endsWith('</svg>')) {

@@ -84,6 +84,7 @@ const detailGenerateMenu = document.getElementById('detailGenerateMenu')!;
 const detailGenerateDropdown = document.getElementById('detailGenerateDropdown')!;
 const detailGenerateWithPrompt = document.getElementById('detailGenerateWithPrompt')!;
 const detailAttach = document.getElementById('detailAttach')!;
+const detailCancelGenerate = document.getElementById('detailCancelGenerate')!;
 const walkthroughBtn = document.getElementById('walkthroughBtn')!;
 const promptEditor = document.getElementById('promptEditor')!;
 const promptPre = document.getElementById('promptPre')!;
@@ -537,7 +538,14 @@ detailOpen.addEventListener('click', () => {
   });
 });
 
-// Sparkle button: generate immediately with defaults
+// Sparkle button: toggle dropdown
+detailGenerateMenu.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const showing = detailGenerateDropdown.style.display !== 'none';
+  detailGenerateDropdown.style.display = showing ? 'none' : 'flex';
+});
+
+// Generate (default prompt)
 detailGenerate.addEventListener('click', () => {
   if (!activeDetailProject) return;
   detailGenerateDropdown.style.display = 'none';
@@ -547,18 +555,21 @@ detailGenerate.addEventListener('click', () => {
   });
 });
 
-// Chevron: toggle dropdown
-detailGenerateMenu.addEventListener('click', (e) => {
-  e.stopPropagation();
-  const showing = detailGenerateDropdown.style.display !== 'none';
-  detailGenerateDropdown.style.display = showing ? 'none' : 'flex';
-});
-
-// Dropdown: regenerate with prompt
+// Generate with prompt
 detailGenerateWithPrompt.addEventListener('click', () => {
   if (!activeDetailProject) return;
   detailGenerateDropdown.style.display = 'none';
   showPromptEditor(activeDetailProject.project);
+});
+
+// Cancel generation
+detailCancelGenerate.addEventListener('click', () => {
+  if (!activeDetailProject) return;
+  detailGenerateDropdown.style.display = 'none';
+  vscode.postMessage({
+    type: 'poster:cancel',
+    projectPath: activeDetailProject.project.path,
+  });
 });
 
 promptSubmit.addEventListener('click', () => {
@@ -651,9 +662,14 @@ window.addEventListener('message', (event: MessageEvent<ExtToWebview>) => {
       if (activeDetailProject?.project.path === msg.projectPath) {
         detailPoster.closest('.detail-poster')?.classList.add('forging');
       }
+      // Show cancel option in dropdown
+      detailCancelGenerate.style.display = 'flex';
       break;
     }
     case 'poster:loaded': {
+      // Hide cancel option
+      detailCancelGenerate.style.display = 'none';
+
       // Clear forge animation
       const forgingCard = shelfContent.querySelector(
         `.project-card.forging[data-path="${CSS.escape(msg.projectPath)}"]`

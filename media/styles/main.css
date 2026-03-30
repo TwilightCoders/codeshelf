@@ -709,11 +709,6 @@ body {
   position: static;
 }
 
-.detail-generate-menu {
-  font-size: 12px !important;
-  padding: 5px 3px !important;
-}
-
 .detail-generate-dropdown {
   position: absolute;
   top: 100%;
