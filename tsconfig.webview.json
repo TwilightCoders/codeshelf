@@ -9,7 +9,8 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx"
   },
-  "include": ["src/webview/**/*.ts", "src/shared/**/*.ts"]
+  "include": ["src/webview/**/*.ts", "src/webview/**/*.tsx", "src/shared/**/*.ts"]
 }

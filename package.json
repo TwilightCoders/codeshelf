@@ -83,7 +83,11 @@
                     },
                     "flatten": {
                       "type": "string",
-                      "enum": ["auto", "always", "never"],
+                      "enum": [
+                        "auto",
+                        "always",
+                        "never"
+                      ],
                       "default": "auto",
                       "description": "Control bookset flattening: auto (use threshold), always (force flat), never (keep booksets)"
                     },
@@ -144,9 +148,10 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./ && tsc -p ./tsconfig.webview.json",
+    "compile": "tsc -p ./ && node esbuild.mjs",
+    "compile:check": "tsc -p ./ && tsc -p ./tsconfig.webview.json --noEmit",
     "watch": "tsc -watch -p ./",
-    "watch:webview": "tsc -watch -p ./tsconfig.webview.json",
+    "watch:webview": "node esbuild.mjs --watch",
     "vscode:prepublish": "npm run compile",
     "package": "vsce package"
   },
@@ -157,6 +162,9 @@
     "typescript": "^5.8.0"
   },
   "dependencies": {
-    "@vscode/codicons": "^0.0.45"
+    "@vscode/codicons": "^0.0.45",
+    "esbuild": "^0.27.4",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
   }
 }
