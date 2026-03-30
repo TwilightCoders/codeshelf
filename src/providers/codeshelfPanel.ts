@@ -381,13 +381,26 @@ export class CodeShelfPanel {
       const fs = require('fs');
       let svg: string = await fs.promises.readFile(filePath, 'utf-8');
       if (!svg.includes('<svg')) return undefined;
-      // Ensure the SVG scales properly when embedded (cover, not stretch)
-      svg = svg.replace(/<svg([^>]*)>/, (match: string, attrs: string) => {
-        // Add preserveAspectRatio if not already present
-        if (!attrs.includes('preserveAspectRatio')) {
-          return `<svg${attrs} preserveAspectRatio="xMidYMid slice">`;
+      // Make SVG scale properly when embedded:
+      // - Ensure viewBox exists (needed for scaling)
+      // - Remove hardcoded width/height so CSS controls sizing
+      // - Add preserveAspectRatio for cover-style scaling
+      svg = svg.replace(/<svg([^>]*)>/, (_match: string, attrs: string) => {
+        let newAttrs = attrs;
+        // Extract width/height to build viewBox if missing
+        const wMatch = attrs.match(/width="(\d+)"/);
+        const hMatch = attrs.match(/height="(\d+)"/);
+        if (!attrs.includes('viewBox') && wMatch && hMatch) {
+          newAttrs += ` viewBox="0 0 ${wMatch[1]} ${hMatch[1]}"`;
         }
-        return match;
+        // Remove hardcoded width/height
+        newAttrs = newAttrs.replace(/\s*width="[^"]*"/g, '');
+        newAttrs = newAttrs.replace(/\s*height="[^"]*"/g, '');
+        // Add preserveAspectRatio
+        if (!newAttrs.includes('preserveAspectRatio')) {
+          newAttrs += ' preserveAspectRatio="xMidYMid slice"';
+        }
+        return `<svg${newAttrs}>`;
       });
       return svg;
     } catch {
