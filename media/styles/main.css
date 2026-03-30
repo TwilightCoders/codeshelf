@@ -628,7 +628,7 @@ body {
 
 .detail-panel {
   position: relative;
-  width: 400px;
+  width: 500px;
   max-width: 90vw;
   max-height: 90vh;
   background: var(--vscode-sideBar-background, var(--vscode-editor-background));
@@ -642,7 +642,7 @@ body {
 }
 
 .detail-poster {
-  min-height: 240px;
+  min-height: 340px;
   display: flex;
   align-items: center;
   justify-content: center;
