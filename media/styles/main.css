@@ -240,6 +240,31 @@ body {
   display: none;
 }
 
+/* ── Hidden shelf pills ── */
+.hidden-pills {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.hidden-pill {
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--vscode-descriptionForeground);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 1px 10px;
+  cursor: pointer;
+  opacity: 0.4;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.hidden-pill:hover {
+  opacity: 0.8;
+  background: rgba(255, 255, 255, 0.1);
+}
+
 /* ── Collapse arrows ── */
 .collapse-arrow {
   display: inline-block;

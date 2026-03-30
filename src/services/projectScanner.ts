@@ -193,8 +193,7 @@ export async function scanRoots(
 
       const shelfMeta = resolveShelfMeta(topDir.path, rootConfig);
 
-      // Skip if explicitly hidden in shelf metadata
-      if (shelfMeta?.hidden) continue;
+      // Don't skip hidden shelves — pass them through so the webview can show pills
 
       const topMarkers = await detectMarkers(topDir.path);
       if (topMarkers.length > 0) {
@@ -254,6 +253,7 @@ export async function scanRoots(
             rootLabel,
             rootPath: expandedRoot,
             starred: shelfMeta?.starred,
+            hidden: shelfMeta?.hidden,
             flatten: shelfMeta?.flatten,
             items,
           });

@@ -308,6 +308,9 @@ function renderBookset(item: Extract<ShelfItem, { kind: 'bookset' }>, rootPath: 
 }
 
 function renderShelf(shelf: Shelf, query: string): string {
+  // Hidden shelves are not rendered (pills shown in root header instead)
+  if (shelf.hidden) return '';
+
   const shelfMatches = query && shelf.name.toLowerCase().includes(query);
 
   const filteredItems = query && !shelfMatches
@@ -419,21 +422,27 @@ function renderShelves(query: string = '') {
     // If searching and root label matches, show all shelves in this root
     const rootMatches = q && rootLabel.toLowerCase().includes(q);
 
+    const hiddenInRoot = shelves.filter(s => s.hidden);
     const shelfHtml = shelves
       .map(s => renderShelf(s, rootMatches ? '' : q))
       .filter(h => h.length > 0)
       .join('');
 
-    if (!shelfHtml) continue;
+    if (!shelfHtml && hiddenInRoot.length === 0) continue;
 
     const isCollapsed = viewState.collapsedRoots[rootLabel] ?? false;
     const arrowClass = isCollapsed ? 'collapse-arrow collapsed' : 'collapse-arrow';
+
+    const hiddenPills = hiddenInRoot.map(s =>
+      `<button class="hidden-pill" data-unhide-path="${s.path}" data-root-path="${s.rootPath}" title="Show ${s.name}">${s.name}</button>`
+    ).join('');
 
     html += `
       <div class="root-group ${isCollapsed ? 'collapsed' : ''}" data-root-label="${rootLabel}">
         <h2 class="root-header">
           <span class="root-collapse ${arrowClass}" data-collapse-root="${rootLabel}">&#9656;</span>
           ${rootLabel}
+          ${hiddenPills ? `<span class="hidden-pills">${hiddenPills}</span>` : ''}
         </h2>
         <div class="root-shelves ${isCollapsed ? 'hidden' : ''}">${shelfHtml}</div>
       </div>
@@ -489,7 +498,7 @@ function attachHandlers() {
       const hidePath = el.dataset.hidePath;
       const rootPath = el.dataset.rootPath;
       if (hidePath && rootPath) {
-        vscode.postMessage({ type: 'item:hide', path: hidePath, rootPath });
+        vscode.postMessage({ type: 'item:hide', path: hidePath, rootPath, hidden: true });
       }
     });
   });
@@ -504,6 +513,19 @@ function attachHandlers() {
       const isCurrentlyStarred = el.classList.contains('starred');
       if (starPath && rootPath) {
         vscode.postMessage({ type: 'item:star', path: starPath, rootPath, starred: !isCurrentlyStarred });
+      }
+    });
+  });
+
+  // Unhide pills
+  shelfContent.querySelectorAll('.hidden-pill').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const el = btn as HTMLElement;
+      const unhidePath = el.dataset.unhidePath;
+      const rootPath = el.dataset.rootPath;
+      if (unhidePath && rootPath) {
+        vscode.postMessage({ type: 'item:hide', path: unhidePath, rootPath, hidden: false });
       }
     });
   });

@@ -147,7 +147,7 @@ export class CodeShelfPanel {
         break;
       }
       case 'item:hide': {
-        await this.updateItemMeta(msg.rootPath, msg.path, { hidden: true });
+        await this.updateItemMeta(msg.rootPath, msg.path, { hidden: msg.hidden });
         await this.scan();
         break;
       }

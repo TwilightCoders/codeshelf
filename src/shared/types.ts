@@ -18,6 +18,7 @@ export interface Shelf {
   rootLabel: string;
   rootPath: string;
   starred?: boolean;
+  hidden?: boolean;
   flatten?: 'auto' | 'always' | 'never';
   items: ShelfItem[];
 }
@@ -79,7 +80,7 @@ export type WebviewToExt =
   | { type: 'settings:addRoot'; path: string }
   | { type: 'settings:pickRoot' }
   | { type: 'item:editMeta'; path: string }
-  | { type: 'item:hide'; path: string; rootPath: string }
+  | { type: 'item:hide'; path: string; rootPath: string; hidden: boolean }
   | { type: 'item:star'; path: string; rootPath: string; starred: boolean }
   | { type: 'poster:generate'; projectPath: string; userNotes?: string }
   | { type: 'poster:cancel'; projectPath: string }
