@@ -379,10 +379,17 @@ export class CodeShelfPanel {
   private async readSvg(filePath: string): Promise<string | undefined> {
     try {
       const fs = require('fs');
-      const svg = await fs.promises.readFile(filePath, 'utf-8');
-      // Validate it's actually SVG
-      if (svg.includes('<svg')) return svg;
-      return undefined;
+      let svg: string = await fs.promises.readFile(filePath, 'utf-8');
+      if (!svg.includes('<svg')) return undefined;
+      // Ensure the SVG scales properly when embedded (cover, not stretch)
+      svg = svg.replace(/<svg([^>]*)>/, (match: string, attrs: string) => {
+        // Add preserveAspectRatio if not already present
+        if (!attrs.includes('preserveAspectRatio')) {
+          return `<svg${attrs} preserveAspectRatio="xMidYMid slice">`;
+        }
+        return match;
+      });
+      return svg;
     } catch {
       return undefined;
     }

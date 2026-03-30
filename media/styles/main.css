@@ -349,8 +349,8 @@ body {
 
 .card-poster-image svg {
   display: block;
-  min-width: 100%;
-  min-height: 100%;
+  width: 100%;
+  height: 100%;
 }
 
 .card-poster-image img {
@@ -660,8 +660,8 @@ body {
 
 .detail-poster-content svg {
   display: block;
-  min-width: 100%;
-  min-height: 100%;
+  width: 100%;
+  height: 100%;
 }
 
 .detail-poster-content .card-badge {
