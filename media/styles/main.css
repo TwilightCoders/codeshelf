@@ -376,6 +376,14 @@ body {
   gap: 6px;
 }
 
+.shelf-modal-actions .action-btn {
+  opacity: 0.7;
+}
+
+.shelf-modal-actions .action-btn:hover {
+  opacity: 1;
+}
+
 .shelf-modal-search {
   width: 200px;
 }
