@@ -545,13 +545,14 @@ detailGenerateMenu.addEventListener('click', (e) => {
   detailGenerateDropdown.style.display = showing ? 'none' : 'flex';
 });
 
-// Generate (default prompt)
+// Generate (re-uses last prompt if any)
 detailGenerate.addEventListener('click', () => {
   if (!activeDetailProject) return;
   detailGenerateDropdown.style.display = 'none';
   vscode.postMessage({
     type: 'poster:generate',
     projectPath: activeDetailProject.project.path,
+    userNotes: activeDetailProject.project.posterPrompt || undefined,
   });
 });
 
