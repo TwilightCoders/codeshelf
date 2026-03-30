@@ -696,14 +696,55 @@ body {
   background: rgba(0, 0, 0, 0.6);
 }
 
-.detail-generate-btn {
+.detail-poster-btn-group {
+  position: absolute;
   top: 8px;
   left: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
 }
 
-.detail-attach-btn {
-  top: 8px;
-  left: 38px;
+.detail-poster-btn-group .detail-poster-btn {
+  position: static;
+}
+
+.detail-generate-menu {
+  font-size: 12px !important;
+  padding: 5px 3px !important;
+}
+
+.detail-generate-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 2px;
+  flex-direction: column;
+  background: var(--vscode-menu-background, var(--vscode-editor-background));
+  border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border, rgba(255,255,255,0.15)));
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  min-width: 200px;
+  overflow: hidden;
+}
+
+.dropdown-item {
+  background: none;
+  border: none;
+  color: var(--vscode-menu-foreground, var(--vscode-editor-foreground));
+  cursor: pointer;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.dropdown-item:hover {
+  background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground));
 }
 
 .detail-close {

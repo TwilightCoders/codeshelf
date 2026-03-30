@@ -80,6 +80,9 @@ const detailPath = document.getElementById('detailPath')!;
 const detailMeta = document.getElementById('detailMeta')!;
 const detailOpen = document.getElementById('detailOpen')!;
 const detailGenerate = document.getElementById('detailGenerate')!;
+const detailGenerateMenu = document.getElementById('detailGenerateMenu')!;
+const detailGenerateDropdown = document.getElementById('detailGenerateDropdown')!;
+const detailGenerateWithPrompt = document.getElementById('detailGenerateWithPrompt')!;
 const detailAttach = document.getElementById('detailAttach')!;
 const walkthroughBtn = document.getElementById('walkthroughBtn')!;
 const promptEditor = document.getElementById('promptEditor')!;
@@ -534,8 +537,27 @@ detailOpen.addEventListener('click', () => {
   });
 });
 
+// Sparkle button: generate immediately with defaults
 detailGenerate.addEventListener('click', () => {
   if (!activeDetailProject) return;
+  detailGenerateDropdown.style.display = 'none';
+  vscode.postMessage({
+    type: 'poster:generate',
+    projectPath: activeDetailProject.project.path,
+  });
+});
+
+// Chevron: toggle dropdown
+detailGenerateMenu.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const showing = detailGenerateDropdown.style.display !== 'none';
+  detailGenerateDropdown.style.display = showing ? 'none' : 'flex';
+});
+
+// Dropdown: regenerate with prompt
+detailGenerateWithPrompt.addEventListener('click', () => {
+  if (!activeDetailProject) return;
+  detailGenerateDropdown.style.display = 'none';
   showPromptEditor(activeDetailProject.project);
 });
 
@@ -567,9 +589,18 @@ walkthroughBtn.addEventListener('click', () => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && activeDetailProject) {
-    hideDetail();
+  if (e.key === 'Escape') {
+    detailGenerateDropdown.style.display = 'none';
+    if (promptEditor.style.display !== 'none') {
+      hidePromptEditor();
+    } else if (activeDetailProject) {
+      hideDetail();
+    }
   }
+});
+
+document.addEventListener('click', () => {
+  detailGenerateDropdown.style.display = 'none';
 });
 
 searchInput.addEventListener('input', () => {

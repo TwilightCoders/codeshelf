@@ -508,8 +508,14 @@ export class CodeShelfPanel {
       <div class="detail-panel">
         <div class="detail-poster">
           <div class="detail-poster-content" id="detailPoster"></div>
-          <button class="detail-poster-btn detail-generate-btn" id="detailGenerate" title="Generate poster"><i class="codicon codicon-sparkle"></i></button>
-          <button class="detail-poster-btn detail-attach-btn" id="detailAttach" title="Attach custom poster"><i class="codicon codicon-file-media"></i></button>
+          <div class="detail-poster-btn-group">
+            <button class="detail-poster-btn detail-generate-btn" id="detailGenerate" title="Regenerate poster"><i class="codicon codicon-sparkle"></i></button>
+            <button class="detail-poster-btn detail-generate-menu" id="detailGenerateMenu" title="Options"><i class="codicon codicon-chevron-down"></i></button>
+            <div class="detail-generate-dropdown" id="detailGenerateDropdown" style="display:none">
+              <button class="dropdown-item" id="detailGenerateWithPrompt"><i class="codicon codicon-edit"></i> Regenerate with prompt</button>
+              <button class="dropdown-item" id="detailAttach"><i class="codicon codicon-file-media"></i> Attach custom poster</button>
+            </div>
+          </div>
           <button class="detail-poster-btn detail-close" title="Close"><i class="codicon codicon-close"></i></button>
           <!-- Prompt editor (overlays the poster area) -->
           <div class="prompt-editor" id="promptEditor" style="display:none">
