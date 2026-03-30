@@ -771,6 +771,24 @@ body {
 .detail-meta {
   font-size: 12px;
   color: var(--vscode-descriptionForeground);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.detail-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.detail-time {
+  opacity: 0.6;
+}
+
+.detail-lang {
+  opacity: 0.5;
+  font-size: 11px;
 }
 
 .detail-open {

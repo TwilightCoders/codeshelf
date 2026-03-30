@@ -138,12 +138,15 @@ function showDetail(projectPath: string) {
   detailName.textContent = project.name;
   detailPath.textContent = project.path;
 
-  const metaParts: string[] = [];
-  if (project.primaryLanguage) metaParts.push(project.primaryLanguage);
-  if (project.gitBranch) metaParts.push(`branch: ${project.gitBranch}`);
-  metaParts.push(timeAgo(project.lastModified));
-  if (project.markers.length > 0) metaParts.push(project.markers.filter(m => m !== '.git').join(', '));
-  detailMeta.textContent = metaParts.join('  ·  ');
+  let metaHtml = '';
+  if (project.gitBranch) {
+    metaHtml += `<span class="detail-branch"><i class="codicon codicon-git-branch"></i> ${project.gitBranch}</span>`;
+  }
+  metaHtml += `<span class="detail-time">${timeAgo(project.lastModified)}</span>`;
+  if (project.primaryLanguage) {
+    metaHtml += `<span class="detail-lang">${project.primaryLanguage}</span>`;
+  }
+  detailMeta.innerHTML = metaHtml;
 
   // Update generate button tooltip
   detailGenerate.title = project.poster ? 'Regenerate poster' : 'Generate poster';
