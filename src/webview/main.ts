@@ -1,5 +1,4 @@
 import { ExtToWebview, WebviewToExt, Shelf, ShelfItem, Project, ScanDiff } from '../shared/types';
-import { POSTER_SYSTEM_PROMPT, buildPosterPrompt } from '../shared/constants';
 
 declare function acquireVsCodeApi(): {
   postMessage(msg: WebviewToExt): void;
@@ -158,8 +157,18 @@ function showPromptEditor(project: Project) {
   const lang = project.primaryLanguage ?? 'software';
   const markers = project.markers.filter(m => m !== '.git').join(', ');
 
-  promptPre.textContent = buildPosterPrompt(project.name, lang, markers);
-  promptPost.textContent = POSTER_SYSTEM_PROMPT;
+  promptPre.textContent = [
+    `Generate a minimal, elegant SVG poster for a ${lang} project called "${project.name}".`,
+    '400x240px, dark background, subtle geometric elements, project name prominent.',
+    'Modern technical style, like a Steam game library card.',
+    markers ? `Tech: ${markers}` : '',
+  ].filter(Boolean).join('\n');
+
+  promptPost.textContent = [
+    'Output ONLY raw SVG markup. 400x240px.',
+    'No files, no tools, no markdown fences.',
+    'Response starts with <svg, ends with </svg>.',
+  ].join('\n');
 
   promptInput.value = '';
   promptEditor.style.display = 'flex';
