@@ -585,6 +585,14 @@ window.addEventListener('message', (event: MessageEvent<ExtToWebview>) => {
       if (forgingCard) forgingCard.classList.remove('forging');
       if (activeDetailProject?.project.path === msg.projectPath) {
         detailPoster.closest('.detail-poster')?.classList.remove('forging');
+        // Update the detail modal poster
+        if (msg.posterUri) {
+          detailPoster.innerHTML = msg.posterUri;
+          detailPoster.classList.add('has-poster');
+          detailPoster.style.backgroundColor = '';
+          activeDetailProject.project.poster = msg.posterUri;
+          detailGenerate.title = 'Regenerate poster';
+        }
       }
 
       // Find the card and trigger a flip animation
