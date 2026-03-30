@@ -231,6 +231,7 @@ body {
   border: 1px solid var(--vscode-panel-border, rgba(255,255,255,0.10));
   border-radius: 6px;
   padding: 16px;
+  padding-top: 18px;
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
@@ -319,9 +320,10 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 16px;
-  max-height: 220px;
+  max-height: 230px;
   overflow: hidden;
   position: relative;
+  padding-top: 4px;
 }
 
 .shelf-row-content.hidden {
