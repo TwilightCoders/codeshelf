@@ -613,6 +613,36 @@ body {
   vertical-align: middle;
 }
 
+.shelf-filter-input {
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-family: inherit;
+  width: 0;
+  opacity: 0;
+  transition: width 0.2s ease, opacity 0.2s ease, border-color 0.15s ease;
+  outline: none;
+}
+
+.shelf-row-title:hover .shelf-filter-input,
+.shelf-filter-input:focus,
+.shelf-filter-input:not(:placeholder-shown) {
+  width: 100px;
+  opacity: 1;
+  border-color: var(--vscode-input-border, rgba(255,255,255,0.1));
+}
+
+.shelf-filter-input:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+.shelf-filter-input::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
 .shelf-actions .action-btn {
   font-size: 13px;
 }

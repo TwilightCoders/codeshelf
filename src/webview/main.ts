@@ -479,6 +479,7 @@ function renderShelf(shelf: Shelf, query: string): string {
         <span class="shelf-collapse ${arrowClass}" data-collapse-shelf="${shelf.path}">&#9656;</span>
         ${shelf.name}
         <span class="shelf-actions">
+          <input type="text" class="shelf-filter-input" data-filter-shelf="${shelf.path}" placeholder="Filter..." />
           <button class="action-btn star-btn ${shelf.starred ? 'starred' : ''}" data-star-path="${shelf.path}" data-root-path="${shelf.rootPath}" title="Star shelf"><i class="codicon codicon-star-${shelf.starred ? 'full' : 'empty'}"></i></button>
           <button class="action-btn hide-btn" data-hide-path="${shelf.path}" data-root-path="${shelf.rootPath}" title="Hide shelf"><i class="codicon codicon-eye-closed"></i></button>
           <button class="action-btn edit-btn" data-edit-path="${shelf.path}" title="Edit shelf metadata"><i class="codicon codicon-edit"></i></button>
@@ -626,6 +627,26 @@ function attachHandlers() {
         vscode.postMessage({ type: 'item:star', path: starPath, rootPath, starred: !isCurrentlyStarred });
       }
     });
+  });
+
+  // Inline shelf filter
+  shelfContent.querySelectorAll('.shelf-filter-input').forEach(input => {
+    input.addEventListener('input', (e) => {
+      e.stopPropagation();
+      const el = input as HTMLInputElement;
+      const shelfPath = el.dataset.filterShelf;
+      const shelfRow = el.closest('.shelf-row');
+      if (!shelfPath || !shelfRow) return;
+
+      const q = el.value.toLowerCase().trim();
+      const cards = shelfRow.querySelectorAll('.project-card');
+      cards.forEach(card => {
+        const name = (card as HTMLElement).querySelector('.card-name')?.textContent?.toLowerCase() ?? '';
+        (card as HTMLElement).style.display = (!q || name.includes(q)) ? '' : 'none';
+      });
+    });
+    // Don't let clicks on the filter bubble to the shelf title click handler
+    input.addEventListener('click', (e) => e.stopPropagation());
   });
 
   // Shelf title clicks → open shelf modal
