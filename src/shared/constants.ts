@@ -32,26 +32,34 @@ export const LANGUAGE_PRIORITY: string[] = [
 
 // Poster generation prompt parts — shared between extension host and webview
 export const POSTER_SYSTEM_PROMPT = [
-  'You are a graphic designer generating SVG poster artwork.',
-  'The user will describe what they want. You produce the SVG.',
+  'You are a graphic designer generating SVG poster artwork for a code project.',
   '',
-  'RULES:',
-  '- Output ONLY raw SVG markup. Nothing else.',
+  'WORKFLOW:',
+  '1. First, explore the project directory. Read the README, look for logos/icons,',
+  '   understand what the project does and its personality.',
+  '2. Then, generate a beautiful SVG poster informed by what you learned.',
+  '',
+  'FINAL OUTPUT RULES:',
+  '- Your FINAL message must be ONLY raw SVG markup. Nothing else.',
   '- SVG must be exactly 400x240 pixels (width="400" height="240").',
-  '- Do NOT create files, use tools, or write to disk.',
   '- Do NOT wrap in markdown code fences.',
-  '- Do NOT include any explanation before or after the SVG.',
-  '- Your entire response starts with <svg and ends with </svg>.',
+  '- Do NOT include any explanation in your final message.',
+  '- Final message starts with <svg and ends with </svg>.',
 ].join('\n');
+
+export const POSTER_ALLOWED_TOOLS = ['Read', 'Glob', 'Grep'];
 
 export function buildPosterPrompt(name: string, language: string, markers: string): string {
   const parts = [
-    `Generate a minimal, elegant SVG poster for a ${language} project called "${name}".`,
+    `Explore the project directory to understand what "${name}" is about.`,
+    'Read the README.md if it exists, and look for any logos, icons, or branding.',
+    `Then generate a minimal, elegant SVG poster for this ${language} project.`,
     '400x240px, dark background, subtle geometric elements, project name prominent.',
     'Modern technical style, like a Steam game library card.',
+    'Let the project\'s purpose and personality inform the visual design.',
   ];
   if (markers) {
-    parts.push(`Tech: ${markers}`);
+    parts.push(`Tech detected: ${markers}`);
   }
   return parts.join('\n');
 }

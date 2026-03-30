@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { execFile } from 'child_process';
 import { Project } from '../shared/types';
-import { POSTER_SYSTEM_PROMPT, buildPosterPrompt } from '../shared/constants';
+import { POSTER_SYSTEM_PROMPT, POSTER_ALLOWED_TOOLS, buildPosterPrompt } from '../shared/constants';
 import { Capabilities } from './capabilities';
 
 
@@ -102,7 +102,7 @@ export class PosterGenerator {
       const stdout = await new Promise<string>((resolve, reject) => {
         this.activeProcess = execFile(
           this.capabilities.claudeCliPath!,
-          ['-p', fullPrompt, '--output-format', 'text', '--max-turns', '1', '--system-prompt', POSTER_SYSTEM_PROMPT],
+          ['-p', fullPrompt, '--output-format', 'text', '--max-turns', '5', '--system-prompt', POSTER_SYSTEM_PROMPT, '--allowedTools', ...POSTER_ALLOWED_TOOLS],
           {
             timeout: 120000,
             maxBuffer: 1024 * 512,

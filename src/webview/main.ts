@@ -165,16 +165,18 @@ function showPromptEditor(project: Project) {
   const markers = project.markers.filter(m => m !== '.git').join(', ');
 
   promptPre.textContent = [
-    `Generate a minimal, elegant SVG poster for a ${lang} project called "${project.name}".`,
+    `Explore the project directory to understand what "${project.name}" is about.`,
+    'Read the README.md if it exists, look for logos, icons, or branding.',
+    `Then generate a minimal, elegant SVG poster for this ${lang} project.`,
     '400x240px, dark background, subtle geometric elements, project name prominent.',
     'Modern technical style, like a Steam game library card.',
-    markers ? `Tech: ${markers}` : '',
+    markers ? `Tech detected: ${markers}` : '',
   ].filter(Boolean).join('\n');
 
   promptPost.textContent = [
-    'Output ONLY raw SVG markup. 400x240px.',
-    'No files, no tools, no markdown fences.',
-    'Response starts with <svg, ends with </svg>.',
+    'Final output: ONLY raw SVG markup. 400x240px.',
+    'Read-only tools allowed: Read, Glob, Grep.',
+    'Final message starts with <svg, ends with </svg>.',
   ].join('\n');
 
   promptInput.value = project.posterPrompt ?? '';
