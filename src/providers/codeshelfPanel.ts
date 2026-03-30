@@ -147,12 +147,12 @@ export class CodeShelfPanel {
         break;
       }
       case 'item:hide': {
-        await this.updateShelfMeta(msg.rootPath, msg.path, { hidden: true });
+        await this.updateItemMeta(msg.rootPath, msg.path, { hidden: true });
         await this.scan();
         break;
       }
       case 'item:star': {
-        await this.updateShelfMeta(msg.rootPath, msg.path, { starred: msg.starred });
+        await this.updateItemMeta(msg.rootPath, msg.path, { starred: msg.starred });
         await this.scan();
         break;
       }
@@ -197,38 +197,65 @@ export class CodeShelfPanel {
     await this.scan();
   }
 
-  private async updateShelfMeta(rootPath: string, shelfPath: string, updates: Record<string, unknown>) {
+  private async updateItemMeta(rootPath: string, itemPath: string, updates: Record<string, unknown>) {
+    const pathModule = require('path');
     const config = vscode.workspace.getConfiguration('codeshelf');
     const roots = config.get<RootsConfig>('roots', {});
-    // Find root by expanded or raw path
     const rootKey = Object.keys(roots).find(k =>
       k === rootPath || k.replace(/^~/, process.env.HOME ?? '') === rootPath
     );
     if (!rootKey) return;
+    const expandedRoot = rootKey.replace(/^~/, process.env.HOME ?? '');
 
     const root = roots[rootKey];
     if (!root.shelves) root.shelves = {};
 
-    // Try to find existing shelf entry by full path or basename
-    const basename = require('path').basename(shelfPath);
-    const shelfKey = root.shelves[shelfPath] ? shelfPath
-      : root.shelves[basename] ? basename
-      : basename; // default to basename for new entries
+    // Determine if itemPath is a shelf (direct child of root) or a project (deeper)
+    const relativePath = pathModule.relative(expandedRoot, itemPath);
+    const parts: string[] = relativePath.split(pathModule.sep);
 
-    if (!root.shelves[shelfKey]) root.shelves[shelfKey] = {};
-    const shelf = root.shelves[shelfKey];
-    for (const [key, value] of Object.entries(updates)) {
-      if (value === false || value === undefined || value === null || value === '') {
-        delete (shelf as Record<string, unknown>)[key];
-      } else {
-        (shelf as Record<string, unknown>)[key] = value;
+    const applyUpdates = (obj: Record<string, unknown>) => {
+      for (const [key, value] of Object.entries(updates)) {
+        if (value === false || value === undefined || value === null || value === '') {
+          delete obj[key];
+        } else {
+          obj[key] = value;
+        }
+      }
+    };
+
+    if (parts.length === 1) {
+      // Direct child of root → it's a shelf
+      const shelfKey = root.shelves[itemPath] ? itemPath
+        : root.shelves[parts[0]] ? parts[0]
+        : parts[0];
+      if (!root.shelves[shelfKey]) root.shelves[shelfKey] = {};
+      applyUpdates(root.shelves[shelfKey] as Record<string, unknown>);
+      if (Object.keys(root.shelves[shelfKey]).length === 0) {
+        delete root.shelves[shelfKey];
+      }
+    } else {
+      // Deeper → it's a project inside a shelf
+      const shelfName = parts[0];
+      const projectName = pathModule.basename(itemPath);
+      const shelfKey = root.shelves[shelfName] ? shelfName : shelfName;
+      if (!root.shelves[shelfKey]) root.shelves[shelfKey] = {};
+      const shelf = root.shelves[shelfKey];
+      if (!shelf.projects) shelf.projects = {};
+      const projKey = shelf.projects[projectName] ? projectName : projectName;
+      if (!shelf.projects[projKey]) shelf.projects[projKey] = {};
+      applyUpdates(shelf.projects[projKey] as Record<string, unknown>);
+      if (Object.keys(shelf.projects[projKey]).length === 0) {
+        delete shelf.projects[projKey];
+      }
+      if (shelf.projects && Object.keys(shelf.projects).length === 0) {
+        delete shelf.projects;
+      }
+      if (Object.keys(shelf).length === 0) {
+        delete root.shelves[shelfKey];
       }
     }
-    // Clean up empty shelf entries
-    if (Object.keys(shelf).length === 0) {
-      delete root.shelves[shelfKey];
-    }
-    // Clean up empty shelves object
+
     if (Object.keys(root.shelves).length === 0) {
       delete root.shelves;
     }
