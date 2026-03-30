@@ -557,6 +557,24 @@ export class CodeShelfPanel {
       <div id="shelfContent" class="shelf-content"></div>
     </div>
 
+    <!-- Shelf detail modal -->
+    <div id="shelfModal" class="detail-modal" style="display:none">
+      <div class="detail-backdrop"></div>
+      <div class="shelf-modal-panel">
+        <div class="shelf-modal-header">
+          <h2 class="shelf-modal-title" id="shelfModalTitle"></h2>
+          <div class="shelf-modal-actions">
+            <input type="text" class="search-input shelf-modal-search" id="shelfModalSearch" placeholder="Filter projects..." />
+            <button class="action-btn" id="shelfModalStar" title="Star shelf"><i class="codicon codicon-star-empty"></i></button>
+            <button class="action-btn" id="shelfModalHide" title="Hide shelf"><i class="codicon codicon-eye-closed"></i></button>
+            <button class="action-btn" id="shelfModalReveal" title="Reveal in Finder"><i class="codicon codicon-folder-opened"></i></button>
+            <button class="action-btn" id="shelfModalClose" title="Close"><i class="codicon codicon-close"></i></button>
+          </div>
+        </div>
+        <div class="shelf-modal-grid" id="shelfModalGrid"></div>
+      </div>
+    </div>
+
     <!-- Project detail modal -->
     <div id="detailModal" class="detail-modal" style="display:none">
       <div class="detail-backdrop"></div>

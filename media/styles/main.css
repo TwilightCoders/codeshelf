@@ -308,17 +308,84 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  cursor: default;
+  cursor: pointer;
+}
+
+.shelf-row-title:hover {
+  color: var(--vscode-textLink-foreground, #3794ff);
 }
 
 .shelf-row-content {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 16px;
+  max-height: 220px;
+  overflow: hidden;
+  position: relative;
 }
 
 .shelf-row-content.hidden {
   display: none;
+}
+
+/* Fade out at bottom to hint there's more */
+.shelf-row-content.has-overflow::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(transparent, var(--vscode-editor-background));
+  pointer-events: none;
+}
+
+/* ── Shelf detail modal ── */
+.shelf-modal-panel {
+  position: relative;
+  width: 80vw;
+  max-width: 1100px;
+  max-height: 85vh;
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border, rgba(255,255,255,0.12));
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  animation: cardIn 0.25s ease-out;
+}
+
+.shelf-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(255,255,255,0.08));
+  flex-shrink: 0;
+}
+
+.shelf-modal-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.shelf-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.shelf-modal-search {
+  width: 200px;
+}
+
+.shelf-modal-grid {
+  padding: 20px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
 }
 
 /* ── Project card ── */

@@ -74,6 +74,14 @@ const pickRootBtn = document.getElementById('pickRootBtn')!;
 const addRootBtn = document.getElementById('addRootBtn')!;
 const refreshBtn = document.getElementById('refreshBtn')!;
 const settingsBtn = document.getElementById('settingsBtn')!;
+const shelfModal = document.getElementById('shelfModal')!;
+const shelfModalTitle = document.getElementById('shelfModalTitle')!;
+const shelfModalGrid = document.getElementById('shelfModalGrid')!;
+const shelfModalSearch = document.getElementById('shelfModalSearch') as HTMLInputElement;
+const shelfModalStar = document.getElementById('shelfModalStar')!;
+const shelfModalHide = document.getElementById('shelfModalHide')!;
+const shelfModalReveal = document.getElementById('shelfModalReveal')!;
+const shelfModalClose = document.getElementById('shelfModalClose')!;
 const detailModal = document.getElementById('detailModal')!;
 const detailPoster = document.getElementById('detailPoster')!;
 const detailName = document.getElementById('detailName')!;
@@ -95,6 +103,7 @@ const promptSubmit = document.getElementById('promptSubmit')!;
 const promptCancel = document.getElementById('promptCancel')!;
 
 let activeDetailProject: { project: Project; rootPath: string } | null = null;
+let activeShelfModal: Shelf | null = null;
 
 function showScreen(screen: 'setup' | 'shelf' | 'loading') {
   setupScreen.style.display = screen === 'setup' ? 'flex' : 'none';
@@ -159,6 +168,108 @@ function hideDetail() {
   detailModal.style.display = 'none';
   promptEditor.style.display = 'none';
   activeDetailProject = null;
+}
+
+function showShelfModal(shelf: Shelf) {
+  activeShelfModal = shelf;
+  shelfModalTitle.textContent = shelf.name;
+  shelfModalSearch.value = '';
+
+  // Update star icon
+  const starIcon = shelfModalStar.querySelector('.codicon')!;
+  starIcon.className = `codicon codicon-star-${shelf.starred ? 'full' : 'empty'}`;
+  shelfModalStar.classList.toggle('starred', !!shelf.starred);
+
+  // Update hide button label
+  shelfModalHide.title = shelf.hidden ? 'Unhide shelf' : 'Hide shelf';
+  const hideIcon = shelfModalHide.querySelector('.codicon')!;
+  hideIcon.className = `codicon codicon-${shelf.hidden ? 'eye' : 'eye-closed'}`;
+
+  renderShelfModalGrid('');
+  shelfModal.style.display = 'flex';
+}
+
+function hideShelfModal() {
+  shelfModal.style.display = 'none';
+  activeShelfModal = null;
+}
+
+function renderShelfModalGrid(filter: string) {
+  if (!activeShelfModal) return;
+  const q = filter.toLowerCase().trim();
+
+  // Collect all projects from the shelf
+  let projects: Project[] = [];
+  for (const item of activeShelfModal.items) {
+    if (item.kind === 'project') {
+      projects.push(item.project);
+    } else {
+      projects.push(...item.projects);
+    }
+  }
+
+  // Filter
+  if (q) {
+    projects = projects.filter(p => p.name.toLowerCase().includes(q));
+  }
+
+  // Sort: starred first, then by lastModified
+  projects.sort((a, b) => {
+    if (a.starred !== b.starred) return a.starred ? -1 : 1;
+    return b.lastModified - a.lastModified;
+  });
+
+  shelfModalGrid.innerHTML = projects.length > 0
+    ? projects.map(p => renderProjectCard(p, activeShelfModal!.rootPath)).join('')
+    : '<p class="empty-state">No projects found.</p>';
+
+  // Attach card click handlers within the modal
+  shelfModalGrid.querySelectorAll('.project-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('.action-btn')) return;
+      const el = card as HTMLElement;
+      if (el.dataset.path) showDetail(el.dataset.path);
+    });
+  });
+
+  // Card action buttons within the modal
+  shelfModalGrid.querySelectorAll('.card-open-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const el = btn as HTMLElement;
+      vscode.postMessage({
+        type: 'project:open',
+        path: el.dataset.openPath!,
+        workspaceFile: el.dataset.openWorkspace,
+      });
+    });
+  });
+
+  shelfModalGrid.querySelectorAll('.star-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const el = btn as HTMLElement;
+      vscode.postMessage({
+        type: 'item:star',
+        path: el.dataset.starPath!,
+        rootPath: el.dataset.rootPath!,
+        starred: !el.classList.contains('starred'),
+      });
+    });
+  });
+
+  shelfModalGrid.querySelectorAll('.hide-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const el = btn as HTMLElement;
+      vscode.postMessage({
+        type: 'item:hide',
+        path: el.dataset.hidePath!,
+        rootPath: el.dataset.rootPath!,
+        hidden: true,
+      });
+    });
+  });
 }
 
 function showPromptEditor(project: Project) {
@@ -517,15 +628,27 @@ function attachHandlers() {
     });
   });
 
-  // Unhide pills
+  // Shelf title clicks → open shelf modal
+  shelfContent.querySelectorAll('.shelf-row-title').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('.action-btn') || (e.target as HTMLElement).closest('.shelf-collapse')) return;
+      const shelfPath = (el.closest('.shelf-row') as HTMLElement)?.dataset.shelfPath;
+      if (shelfPath) {
+        const shelf = allShelves.find(s => s.path === shelfPath);
+        if (shelf) showShelfModal(shelf);
+      }
+    });
+  });
+
+  // Hidden pills → open shelf modal for that hidden shelf
   shelfContent.querySelectorAll('.hidden-pill').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const el = btn as HTMLElement;
       const unhidePath = el.dataset.unhidePath;
-      const rootPath = el.dataset.rootPath;
-      if (unhidePath && rootPath) {
-        vscode.postMessage({ type: 'item:hide', path: unhidePath, rootPath, hidden: false });
+      if (unhidePath) {
+        const shelf = allShelves.find(s => s.path === unhidePath);
+        if (shelf) showShelfModal(shelf);
       }
     });
   });
@@ -580,6 +703,43 @@ settingsBtn.addEventListener('click', () => {
 });
 
 // Detail modal handlers
+// Shelf modal handlers
+shelfModal.querySelector('.detail-backdrop')!.addEventListener('click', hideShelfModal);
+shelfModalClose.addEventListener('click', hideShelfModal);
+
+shelfModalSearch.addEventListener('input', () => {
+  renderShelfModalGrid(shelfModalSearch.value);
+});
+
+shelfModalStar.addEventListener('click', () => {
+  if (!activeShelfModal) return;
+  const isStarred = activeShelfModal.starred;
+  vscode.postMessage({
+    type: 'item:star',
+    path: activeShelfModal.path,
+    rootPath: activeShelfModal.rootPath,
+    starred: !isStarred,
+  });
+});
+
+shelfModalHide.addEventListener('click', () => {
+  if (!activeShelfModal) return;
+  const isHidden = activeShelfModal.hidden;
+  vscode.postMessage({
+    type: 'item:hide',
+    path: activeShelfModal.path,
+    rootPath: activeShelfModal.rootPath,
+    hidden: !isHidden,
+  });
+  hideShelfModal();
+});
+
+shelfModalReveal.addEventListener('click', () => {
+  if (!activeShelfModal) return;
+  vscode.postMessage({ type: 'folder:reveal', path: activeShelfModal.path });
+});
+
+// Project detail modal handlers
 detailModal.querySelector('.detail-backdrop')!.addEventListener('click', hideDetail);
 detailModal.querySelector('.detail-close')!.addEventListener('click', hideDetail);
 
@@ -662,6 +822,8 @@ document.addEventListener('keydown', (e) => {
       hidePromptEditor();
     } else if (activeDetailProject) {
       hideDetail();
+    } else if (activeShelfModal) {
+      hideShelfModal();
     }
   }
 });
