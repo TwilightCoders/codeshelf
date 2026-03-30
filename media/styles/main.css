@@ -742,6 +742,55 @@ body {
   align-self: flex-start;
 }
 
+/* ── Forge animation (poster generating) ── */
+.forging .card-poster-flip,
+.detail-poster.forging .detail-poster-content {
+  position: relative;
+  overflow: hidden;
+}
+
+.forging .card-poster-flip::after,
+.detail-poster.forging::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background:
+    linear-gradient(
+      110deg,
+      transparent 20%,
+      rgba(200, 170, 100, 0.08) 30%,
+      rgba(255, 220, 130, 0.15) 50%,
+      rgba(200, 170, 100, 0.08) 70%,
+      transparent 80%
+    );
+  background-size: 200% 100%;
+  animation: forge-shimmer 1.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.forging .card-poster-flip::before,
+.detail-poster.forging::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border: 1px solid rgba(232, 182, 39, 0.25);
+  border-radius: inherit;
+  animation: forge-pulse 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes forge-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes forge-pulse {
+  0%, 100% { border-color: rgba(232, 182, 39, 0.15); }
+  50% { border-color: rgba(232, 182, 39, 0.4); }
+}
+
 /* ── Animations ── */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }

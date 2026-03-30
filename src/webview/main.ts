@@ -563,7 +563,30 @@ window.addEventListener('message', (event: MessageEvent<ExtToWebview>) => {
       showScreen('shelf');
       showSyncResult(msg.diff);
       break;
+    case 'poster:generating': {
+      // Show forge animation on the card
+      const forgeCard = shelfContent.querySelector(
+        `.project-card[data-path="${CSS.escape(msg.projectPath)}"]`
+      );
+      if (forgeCard) {
+        forgeCard.classList.add('forging');
+      }
+      // Also show on the detail modal if it's open for this project
+      if (activeDetailProject?.project.path === msg.projectPath) {
+        detailPoster.closest('.detail-poster')?.classList.add('forging');
+      }
+      break;
+    }
     case 'poster:loaded': {
+      // Clear forge animation
+      const forgingCard = shelfContent.querySelector(
+        `.project-card.forging[data-path="${CSS.escape(msg.projectPath)}"]`
+      );
+      if (forgingCard) forgingCard.classList.remove('forging');
+      if (activeDetailProject?.project.path === msg.projectPath) {
+        detailPoster.closest('.detail-poster')?.classList.remove('forging');
+      }
+
       // Find the card and trigger a flip animation
       const card = shelfContent.querySelector(
         `.project-card[data-path="${CSS.escape(msg.projectPath)}"]`

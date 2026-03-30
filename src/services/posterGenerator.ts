@@ -114,10 +114,12 @@ export class PosterGenerator {
         return svg;
       }
       const match = svg.match(/<svg[\s\S]*<\/svg>/);
-      return match ? match[0] : undefined;
-    } catch (err) {
-      console.error('CodeShelf: claude CLI error:', err);
-      return undefined;
+      if (match) return match[0];
+      throw new Error(`Claude returned non-SVG output (${svg.length} chars, starts with: ${svg.slice(0, 80)}...)`);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.startsWith('Claude returned')) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Claude CLI error: ${msg}`);
     }
   }
 }

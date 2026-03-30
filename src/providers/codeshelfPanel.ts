@@ -291,14 +291,26 @@ export class CodeShelfPanel {
 
     if (!prompt) return; // cancelled
 
-    this.postMessage({ type: 'projects:scanning', scanning: true });
+    // Signal the webview to show the forge animation
+    this.postMessage({ type: 'poster:generating', projectPath });
 
     try {
+      // Delete existing cached poster so regeneration works
+      const existingPath = this.posterGenerator.getCachedPosterPath(project);
+      if (existingPath) {
+        await require('fs').promises.unlink(existingPath).catch(() => {});
+      }
+
       await this.posterGenerator.generateOne(project, prompt);
-      this.postMessage({ type: 'projects:scanning', scanning: false });
-    } catch {
-      this.postMessage({ type: 'projects:scanning', scanning: false });
-      vscode.window.showErrorMessage('CodeShelf: Failed to generate poster');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`CodeShelf: Failed to generate poster — ${msg}`);
+      // Clear the forge animation
+      this.postMessage({
+        type: 'poster:loaded',
+        projectPath,
+        posterUri: project.poster ?? '',
+      });
     }
   }
 

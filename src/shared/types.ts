@@ -60,6 +60,7 @@ export type ExtToWebview =
   | { type: 'projects:loaded'; shelves: Shelf[]; diff?: ScanDiff }
   | { type: 'projects:scanning'; scanning: boolean }
   | { type: 'settings:state'; hasRoots: boolean }
+  | { type: 'poster:generating'; projectPath: string }
   | { type: 'poster:loaded'; projectPath: string; posterUri: string };
 
 export interface ScanDiff {
