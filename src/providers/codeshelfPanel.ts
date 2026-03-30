@@ -485,7 +485,8 @@ export class CodeShelfPanel {
     <div id="detailModal" class="detail-modal" style="display:none">
       <div class="detail-backdrop"></div>
       <div class="detail-panel">
-        <div class="detail-poster" id="detailPoster">
+        <div class="detail-poster">
+          <div class="detail-poster-content" id="detailPoster"></div>
           <button class="detail-poster-btn detail-generate-btn" id="detailGenerate" title="Generate poster"><i class="codicon codicon-sparkle"></i></button>
           <button class="detail-poster-btn detail-attach-btn" id="detailAttach" title="Attach custom poster"><i class="codicon codicon-file-media"></i></button>
           <button class="detail-poster-btn detail-close" title="Close"><i class="codicon codicon-close"></i></button>
