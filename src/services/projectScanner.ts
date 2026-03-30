@@ -183,6 +183,10 @@ export async function scanRoots(
       .filter(e => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.'))
       .map(e => ({ name: e.name, path: path.join(expandedRoot, e.name) }));
 
+    // Collect top-level projects (dirs that are themselves projects)
+    // into a single shelf instead of one shelf per project
+    const looseProjects: ShelfItem[] = [];
+
     for (const topDir of topDirs) {
       // Skip if this directory is itself configured as a root
       if (allRootPaths.has(topDir.path)) continue;
@@ -195,15 +199,10 @@ export async function scanRoots(
       const topMarkers = await detectMarkers(topDir.path);
       if (topMarkers.length > 0) {
         const pMeta = resolveProjectMeta(topDir.path, shelfMeta);
-        const project = await buildProject(topDir.path, topMarkers, pMeta);
-        shelves.push({
-          name: shelfMeta?.name ?? topDir.name,
-          path: topDir.path,
-          rootLabel,
-          rootPath: expandedRoot,
-          starred: shelfMeta?.starred,
-          items: [{ kind: 'project', project }],
-        });
+        if (!pMeta?.hidden) {
+          const project = await buildProject(topDir.path, topMarkers, pMeta);
+          looseProjects.push({ kind: 'project', project });
+        }
         continue;
       }
 
@@ -240,6 +239,24 @@ export async function scanRoots(
           items,
         });
       }
+    }
+
+    // Add collected loose projects as a single "Projects" shelf
+    if (looseProjects.length > 0) {
+      looseProjects.sort((a, b) => {
+        if (a.kind === 'project' && b.kind === 'project') {
+          if (a.project.starred !== b.project.starred) return a.project.starred ? -1 : 1;
+          return b.project.lastModified - a.project.lastModified;
+        }
+        return 0;
+      });
+      shelves.push({
+        name: 'Projects',
+        path: expandedRoot,
+        rootLabel,
+        rootPath: expandedRoot,
+        items: looseProjects,
+      });
     }
   }
 

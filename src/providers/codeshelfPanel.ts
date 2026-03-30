@@ -155,6 +155,18 @@ export class CodeShelfPanel {
         await this.scan();
         break;
       }
+      case 'poster:generate': {
+        await this.generatePoster(msg.projectPath, msg.prompt);
+        break;
+      }
+      case 'poster:attach': {
+        await this.attachPoster(msg.projectPath);
+        break;
+      }
+      case 'folder:reveal': {
+        await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(msg.path));
+        break;
+      }
       case 'settings:openJson': {
         await vscode.commands.executeCommand('workbench.action.openSettingsJson');
         break;
@@ -243,18 +255,98 @@ export class CodeShelfPanel {
     }
   }
 
-  private collectProjects(shelves: Shelf[]): Project[] {
-    const projects: Project[] = [];
+  private findProject(projectPath: string): Project | undefined {
+    const shelves = this.context.globalState.get<Shelf[]>(CodeShelfPanel.CACHE_KEY, []);
     for (const shelf of shelves) {
       for (const item of shelf.items) {
-        if (item.kind === 'project') {
-          projects.push(item.project);
-        } else {
-          projects.push(...item.projects);
+        if (item.kind === 'project' && item.project.path === projectPath) {
+          return item.project;
+        } else if (item.kind === 'bookset') {
+          const found = item.projects.find(p => p.path === projectPath);
+          if (found) return found;
         }
       }
     }
-    return projects;
+    return undefined;
+  }
+
+  private async generatePoster(projectPath: string, existingPrompt?: string) {
+    await this.ensurePosterGenerator();
+    if (!this.posterGenerator) {
+      vscode.window.showErrorMessage('CodeShelf: No poster generation method available. Install the Claude CLI to generate posters.');
+      return;
+    }
+
+    const project = this.findProject(projectPath);
+    if (!project) return;
+
+    const defaultPrompt = existingPrompt ?? PosterGenerator.buildDefaultPrompt(project);
+
+    const prompt = await vscode.window.showInputBox({
+      title: 'Generate Poster',
+      prompt: 'Edit the prompt for poster generation, then press Enter',
+      value: defaultPrompt,
+      ignoreFocusOut: true,
+    });
+
+    if (!prompt) return; // cancelled
+
+    this.postMessage({ type: 'projects:scanning', scanning: true });
+
+    try {
+      await this.posterGenerator.generateOne(project, prompt);
+      this.postMessage({ type: 'projects:scanning', scanning: false });
+    } catch {
+      this.postMessage({ type: 'projects:scanning', scanning: false });
+      vscode.window.showErrorMessage('CodeShelf: Failed to generate poster');
+    }
+  }
+
+  private async attachPoster(projectPath: string) {
+    const picked = await vscode.window.showOpenDialog({
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: false,
+      openLabel: 'Select Poster Image',
+      filters: { 'Images': ['svg', 'png', 'jpg', 'jpeg', 'webp'] },
+    });
+    if (!picked || picked.length === 0) return;
+
+    const project = this.findProject(projectPath);
+    if (!project) return;
+
+    const sourcePath = picked[0].fsPath;
+    const fs = require('fs');
+    const path = require('path');
+
+    // Copy to cache dir
+    const cacheDir = require('path').join(this.context.globalStorageUri.fsPath, 'posters');
+    await fs.promises.mkdir(cacheDir, { recursive: true });
+    const hash = Buffer.from(project.path).toString('base64url');
+    const ext = path.extname(sourcePath);
+    const destPath = require('path').join(cacheDir, `${hash}${ext}`);
+
+    // Remove any existing cached poster (might be different extension)
+    const existingPoster = this.posterGenerator?.getCachedPosterPath(project);
+    if (existingPoster) {
+      await fs.promises.unlink(existingPoster).catch(() => {});
+    }
+
+    await fs.promises.copyFile(sourcePath, destPath);
+
+    // Read and send as inline content
+    if (ext === '.svg') {
+      const svg = await this.readSvg(destPath);
+      if (svg) {
+        this.postMessage({ type: 'poster:loaded', projectPath, posterUri: svg });
+      }
+    } else {
+      // For raster images, send as data URI
+      const data = await fs.promises.readFile(destPath);
+      const mime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+      const dataUri = `<img src="data:${mime};base64,${data.toString('base64')}" style="width:100%;height:100%;object-fit:cover" />`;
+      this.postMessage({ type: 'poster:loaded', projectPath, posterUri: dataUri });
+    }
   }
 
   private async ensurePosterGenerator() {
@@ -328,12 +420,6 @@ export class CodeShelfPanel {
 
     this.postMessage({ type: 'projects:scanning', scanning: false });
     this.postMessage({ type: 'projects:loaded', shelves, diff });
-
-    // Enqueue projects without posters for background generation
-    if (this.posterGenerator) {
-      const allProjects = this.collectProjects(shelves);
-      this.posterGenerator.enqueue(allProjects);
-    }
   }
 
   private getHtml(): string {
@@ -389,9 +475,30 @@ export class CodeShelfPanel {
           <button id="addRootBtn" class="btn btn-ghost" title="Add another root directory"><i class="codicon codicon-add"></i></button>
           <button id="refreshBtn" class="btn btn-ghost" title="Rescan projects"><i class="codicon codicon-refresh"></i></button>
           <button id="settingsBtn" class="btn btn-ghost" title="Edit settings (JSON)"><i class="codicon codicon-settings-gear"></i></button>
+          <button id="walkthroughBtn" class="btn btn-ghost" title="Show walkthrough"><i class="codicon codicon-lightbulb"></i></button>
         </div>
       </header>
       <div id="shelfContent" class="shelf-content"></div>
+    </div>
+
+    <!-- Project detail modal -->
+    <div id="detailModal" class="detail-modal" style="display:none">
+      <div class="detail-backdrop"></div>
+      <div class="detail-panel">
+        <div class="detail-poster" id="detailPoster">
+          <button class="detail-poster-btn detail-generate-btn" id="detailGenerate" title="Generate poster"><i class="codicon codicon-sparkle"></i></button>
+          <button class="detail-poster-btn detail-attach-btn" id="detailAttach" title="Attach custom poster"><i class="codicon codicon-file-media"></i></button>
+          <button class="detail-poster-btn detail-close" title="Close"><i class="codicon codicon-close"></i></button>
+        </div>
+        <div class="detail-info">
+          <h2 class="detail-name" id="detailName"></h2>
+          <p class="detail-path" id="detailPath"></p>
+          <div class="detail-meta" id="detailMeta"></div>
+          <button class="btn btn-primary detail-open" id="detailOpen">
+            <i class="codicon codicon-folder-opened"></i> Open Project
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Loading -->

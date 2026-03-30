@@ -73,11 +73,77 @@ const pickRootBtn = document.getElementById('pickRootBtn')!;
 const addRootBtn = document.getElementById('addRootBtn')!;
 const refreshBtn = document.getElementById('refreshBtn')!;
 const settingsBtn = document.getElementById('settingsBtn')!;
+const detailModal = document.getElementById('detailModal')!;
+const detailPoster = document.getElementById('detailPoster')!;
+const detailName = document.getElementById('detailName')!;
+const detailPath = document.getElementById('detailPath')!;
+const detailMeta = document.getElementById('detailMeta')!;
+const detailOpen = document.getElementById('detailOpen')!;
+const detailGenerate = document.getElementById('detailGenerate')!;
+const detailAttach = document.getElementById('detailAttach')!;
+const walkthroughBtn = document.getElementById('walkthroughBtn')!;
+
+let activeDetailProject: { project: Project; rootPath: string } | null = null;
 
 function showScreen(screen: 'setup' | 'shelf' | 'loading') {
   setupScreen.style.display = screen === 'setup' ? 'flex' : 'none';
   shelfScreen.style.display = screen === 'shelf' ? 'flex' : 'none';
   loadingScreen.style.display = screen === 'loading' ? 'flex' : 'none';
+}
+
+function findProjectByPath(projectPath: string): { project: Project; rootPath: string } | null {
+  for (const shelf of allShelves) {
+    for (const item of shelf.items) {
+      if (item.kind === 'project' && item.project.path === projectPath) {
+        return { project: item.project, rootPath: shelf.rootPath };
+      } else if (item.kind === 'bookset') {
+        const found = item.projects.find(p => p.path === projectPath);
+        if (found) return { project: found, rootPath: shelf.rootPath };
+      }
+    }
+  }
+  return null;
+}
+
+function showDetail(projectPath: string) {
+  const result = findProjectByPath(projectPath);
+  if (!result) return;
+  activeDetailProject = result;
+  const { project } = result;
+
+  // Poster area
+  if (project.poster) {
+    detailPoster.innerHTML = project.poster;
+    detailPoster.classList.add('has-poster');
+  } else {
+    const lang = project.primaryLanguage;
+    const bgColor = lang ? LANGUAGE_COLORS[lang] ?? hashColor(project.name) : hashColor(project.name);
+    const badge = lang ? LANGUAGE_ICONS[lang] ?? lang.slice(0, 2).toUpperCase() : '';
+    detailPoster.innerHTML = badge ? `<span class="card-badge">${badge}</span>` : '';
+    detailPoster.style.backgroundColor = bgColor;
+    detailPoster.classList.remove('has-poster');
+  }
+
+  // Info
+  detailName.textContent = project.name;
+  detailPath.textContent = project.path;
+
+  const metaParts: string[] = [];
+  if (project.primaryLanguage) metaParts.push(project.primaryLanguage);
+  if (project.gitBranch) metaParts.push(`branch: ${project.gitBranch}`);
+  metaParts.push(timeAgo(project.lastModified));
+  if (project.markers.length > 0) metaParts.push(project.markers.filter(m => m !== '.git').join(', '));
+  detailMeta.textContent = metaParts.join('  ·  ');
+
+  // Update generate button tooltip
+  detailGenerate.title = project.poster ? 'Regenerate poster' : 'Generate poster';
+
+  detailModal.style.display = 'flex';
+}
+
+function hideDetail() {
+  detailModal.style.display = 'none';
+  activeDetailProject = null;
 }
 
 function showSyncStatus(text: string, persistent: boolean = false) {
@@ -142,7 +208,7 @@ function renderProjectCard(project: Project, rootPath: string = ''): string {
   const lang = project.primaryLanguage;
   const bgColor = lang ? LANGUAGE_COLORS[lang] ?? hashColor(project.name) : hashColor(project.name);
   const badge = lang ? LANGUAGE_ICONS[lang] ?? lang.slice(0, 2).toUpperCase() : '';
-  const branch = project.gitBranch ? `<span class="card-branch">${project.gitBranch}</span>` : '';
+  const branch = project.gitBranch ? `<span class="card-branch"><i class="codicon codicon-git-branch"></i> ${project.gitBranch}</span>` : '';
   const modified = `<span class="card-time">${timeAgo(project.lastModified)}</span>`;
   const desc = project.description ? `<p class="card-description">${project.description}</p>` : '';
 
@@ -158,15 +224,16 @@ function renderProjectCard(project: Project, rootPath: string = ''): string {
         ${posterBack}
         ${posterFront}
       </div>
+      <div class="card-overlay">
+        <button class="action-btn star-btn ${project.starred ? 'starred' : ''}" data-star-path="${project.path}" data-root-path="${rootPath}" title="Star"><i class="codicon codicon-star-${project.starred ? 'full' : 'empty'}"></i></button>
+        <button class="action-btn hide-btn" data-hide-path="${project.path}" data-root-path="${rootPath}" title="Hide"><i class="codicon codicon-eye-closed"></i></button>
+        <button class="action-btn edit-btn" data-edit-path="${project.path}" title="Edit"><i class="codicon codicon-edit"></i></button>
+      </div>
+      <button class="card-open-btn action-btn" data-open-path="${project.path}" ${project.workspaceFile ? `data-open-workspace="${project.workspaceFile}"` : ''} title="Open project">
+        <i class="codicon codicon-folder"></i><i class="codicon codicon-folder-opened"></i>
+      </button>
       <div class="card-info">
-        <div class="card-name-row">
-          <span class="card-name">${project.name}</span>
-          <span class="card-actions">
-            <button class="action-btn star-btn ${project.starred ? 'starred' : ''}" data-star-path="${project.path}" data-root-path="${rootPath}" title="Star"><i class="codicon codicon-star-${project.starred ? 'full' : 'empty'}"></i></button>
-            <button class="action-btn hide-btn" data-hide-path="${project.path}" data-root-path="${rootPath}" title="Hide"><i class="codicon codicon-eye-closed"></i></button>
-            <button class="action-btn edit-btn" data-edit-path="${project.path}" title="Edit"><i class="codicon codicon-edit"></i></button>
-          </span>
-        </div>
+        <span class="card-name">${project.name}</span>
         ${desc}
         <div class="card-meta">
           ${branch}
@@ -231,6 +298,7 @@ function renderShelf(shelf: Shelf, query: string): string {
           <button class="action-btn star-btn ${shelf.starred ? 'starred' : ''}" data-star-path="${shelf.path}" data-root-path="${shelf.rootPath}" title="Star shelf"><i class="codicon codicon-star-${shelf.starred ? 'full' : 'empty'}"></i></button>
           <button class="action-btn hide-btn" data-hide-path="${shelf.path}" data-root-path="${shelf.rootPath}" title="Hide shelf"><i class="codicon codicon-eye-closed"></i></button>
           <button class="action-btn edit-btn" data-edit-path="${shelf.path}" title="Edit shelf metadata"><i class="codicon codicon-edit"></i></button>
+          <button class="action-btn reveal-btn" data-reveal-path="${shelf.path}" title="Reveal in Finder"><i class="codicon codicon-folder-opened"></i></button>
         </span>
       </h3>
       <div class="shelf-row-content ${isCollapsed ? 'hidden' : ''}">${content}</div>
@@ -307,19 +375,28 @@ function renderShelves(query: string = '') {
 }
 
 function attachHandlers() {
-  // Project card clicks
+  // Project card clicks → show detail
   shelfContent.querySelectorAll('.project-card').forEach(card => {
     card.addEventListener('click', (e) => {
       if ((e.target as HTMLElement).closest('.action-btn')) return;
       const el = card as HTMLElement;
       const projectPath = el.dataset.path;
       if (projectPath) {
-        vscode.postMessage({
-          type: 'project:open',
-          path: projectPath,
-          workspaceFile: el.dataset.workspace,
-        });
+        showDetail(projectPath);
       }
+    });
+  });
+
+  // Folder open buttons (bottom-right of card)
+  shelfContent.querySelectorAll('.card-open-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const el = btn as HTMLElement;
+      vscode.postMessage({
+        type: 'project:open',
+        path: el.dataset.openPath!,
+        workspaceFile: el.dataset.openWorkspace,
+      });
     });
   });
 
@@ -361,6 +438,17 @@ function attachHandlers() {
     });
   });
 
+  // Reveal in Finder buttons
+  shelfContent.querySelectorAll('.reveal-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const revealPath = (btn as HTMLElement).dataset.revealPath;
+      if (revealPath) {
+        vscode.postMessage({ type: 'folder:reveal', path: revealPath });
+      }
+    });
+  });
+
   // Root collapse toggles
   shelfContent.querySelectorAll('.root-collapse').forEach(el => {
     el.addEventListener('click', () => {
@@ -397,6 +485,46 @@ refreshBtn.addEventListener('click', () => {
 
 settingsBtn.addEventListener('click', () => {
   vscode.postMessage({ type: 'settings:openJson' });
+});
+
+// Detail modal handlers
+detailModal.querySelector('.detail-backdrop')!.addEventListener('click', hideDetail);
+detailModal.querySelector('.detail-close')!.addEventListener('click', hideDetail);
+
+detailOpen.addEventListener('click', () => {
+  if (!activeDetailProject) return;
+  const { project } = activeDetailProject;
+  vscode.postMessage({
+    type: 'project:open',
+    path: project.path,
+    workspaceFile: project.workspaceFile,
+  });
+});
+
+detailGenerate.addEventListener('click', () => {
+  if (!activeDetailProject) return;
+  vscode.postMessage({
+    type: 'poster:generate',
+    projectPath: activeDetailProject.project.path,
+  });
+});
+
+detailAttach.addEventListener('click', () => {
+  if (!activeDetailProject) return;
+  vscode.postMessage({
+    type: 'poster:attach',
+    projectPath: activeDetailProject.project.path,
+  });
+});
+
+walkthroughBtn.addEventListener('click', () => {
+  vscode.postMessage({ type: 'settings:openJson' }); // TODO: wire to walkthrough
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && activeDetailProject) {
+    hideDetail();
+  }
 });
 
 searchInput.addEventListener('input', () => {
