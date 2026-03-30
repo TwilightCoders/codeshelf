@@ -511,6 +511,21 @@ export class CodeShelfPanel {
           <button class="detail-poster-btn detail-generate-btn" id="detailGenerate" title="Generate poster"><i class="codicon codicon-sparkle"></i></button>
           <button class="detail-poster-btn detail-attach-btn" id="detailAttach" title="Attach custom poster"><i class="codicon codicon-file-media"></i></button>
           <button class="detail-poster-btn detail-close" title="Close"><i class="codicon codicon-close"></i></button>
+          <!-- Prompt editor (overlays the poster area) -->
+          <div class="prompt-editor" id="promptEditor" style="display:none">
+            <textarea class="prompt-input" id="promptInput" rows="2" placeholder="Describe what you want..."></textarea>
+            <div class="prompt-editor-row">
+              <div class="prompt-actions">
+                <button class="btn btn-primary" id="promptSubmit"><i class="codicon codicon-sparkle"></i> Generate</button>
+                <button class="btn btn-ghost" id="promptCancel">Cancel</button>
+              </div>
+              <details class="prompt-spoiler">
+                <summary class="prompt-spoiler-toggle"><i class="codicon codicon-eye"></i> Show prompt</summary>
+                <div class="prompt-section" id="promptPre"></div>
+                <div class="prompt-section" id="promptPost"></div>
+              </details>
+            </div>
+          </div>
         </div>
         <div class="detail-info">
           <h2 class="detail-name" id="detailName"></h2>
@@ -519,16 +534,6 @@ export class CodeShelfPanel {
           <button class="btn btn-primary detail-open" id="detailOpen">
             <i class="codicon codicon-folder-opened"></i> Open Project
           </button>
-        </div>
-        <!-- Prompt editor (shown when generating) -->
-        <div class="prompt-editor" id="promptEditor" style="display:none">
-          <div class="prompt-section prompt-pre" id="promptPre"></div>
-          <textarea class="prompt-input" id="promptInput" rows="2" placeholder="Optional: your notes here..."></textarea>
-          <div class="prompt-section prompt-post" id="promptPost"></div>
-          <div class="prompt-actions">
-            <button class="btn btn-primary" id="promptSubmit"><i class="codicon codicon-sparkle"></i> Generate</button>
-            <button class="btn btn-ghost" id="promptCancel">Cancel</button>
-          </div>
         </div>
       </div>
     </div>

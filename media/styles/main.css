@@ -642,7 +642,7 @@ body {
 }
 
 .detail-poster {
-  height: 240px;
+  min-height: 240px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -747,7 +747,7 @@ body {
   align-self: flex-start;
 }
 
-/* ── Prompt editor ── */
+/* ── Prompt editor (inside detail-poster) ── */
 .prompt-editor {
   position: absolute;
   inset: 0;
@@ -755,21 +755,9 @@ body {
   background: var(--vscode-editor-background);
   display: flex;
   flex-direction: column;
-  padding: 16px;
-  gap: 10px;
-  overflow-y: auto;
-}
-
-.prompt-section {
-  font-size: 11px;
-  font-family: var(--vscode-editor-font-family, monospace);
-  color: var(--vscode-descriptionForeground);
-  white-space: pre-wrap;
-  line-height: 1.5;
-  padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 4px;
-  border-left: 2px solid var(--vscode-panel-border, rgba(255,255,255,0.1));
+  justify-content: center;
+  padding: 12px 16px;
+  gap: 8px;
 }
 
 .prompt-input {
@@ -780,9 +768,9 @@ body {
   padding: 8px 10px;
   font-size: 13px;
   font-family: inherit;
-  resize: vertical;
+  resize: none;
   outline: none;
-  min-height: 40px;
+  width: 100%;
 }
 
 .prompt-input:focus {
@@ -793,16 +781,56 @@ body {
   color: var(--vscode-input-placeholderForeground);
 }
 
+.prompt-editor-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .prompt-actions {
   display: flex;
   gap: 8px;
-  margin-top: 4px;
 }
 
 .prompt-actions .btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  font-size: 12px;
+  padding: 6px 14px;
+}
+
+.prompt-spoiler {
+  font-size: 11px;
+}
+
+.prompt-spoiler-toggle {
+  cursor: pointer;
+  color: var(--vscode-descriptionForeground);
+  opacity: 0.6;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+}
+
+.prompt-spoiler-toggle:hover {
+  opacity: 1;
+}
+
+.prompt-section {
+  font-size: 10px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  color: var(--vscode-descriptionForeground);
+  white-space: pre-wrap;
+  line-height: 1.4;
+  padding: 6px 8px;
+  margin-top: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 3px;
+  border-left: 2px solid var(--vscode-panel-border, rgba(255,255,255,0.1));
+  opacity: 0.7;
 }
 
 /* ── Forge animation (poster generating) ── */
