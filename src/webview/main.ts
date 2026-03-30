@@ -226,14 +226,16 @@ function renderShelfModalGrid(filter: string, rebuild: boolean = true) {
     attachShelfModalCardHandlers();
   }
 
-  // Filter: fade cards in/out without rebuilding DOM
-  shelfModalGrid.querySelectorAll('.project-card').forEach(card => {
-    const el = card as HTMLElement;
+  // Filter: reorder matches to top, fade non-matches
+  const cards = Array.from(shelfModalGrid.querySelectorAll('.project-card')) as HTMLElement[];
+  let order = 0;
+  for (const el of cards) {
     const name = el.querySelector('.card-name')?.textContent?.toLowerCase() ?? '';
     const match = !q || name.includes(q);
-    el.style.opacity = match ? '1' : '0.15';
+    el.style.opacity = match ? '1' : '0.1';
+    el.style.order = match ? String(order++) : '9999';
     el.style.pointerEvents = match ? '' : 'none';
-  });
+  }
 }
 
 function attachShelfModalCardHandlers() {
