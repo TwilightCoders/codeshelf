@@ -559,12 +559,12 @@ export class CodeShelfPanel {
           </div>
         </div>
         <div class="detail-info">
-          <h2 class="detail-name" id="detailName"></h2>
+          <div class="detail-title-row">
+            <h2 class="detail-name" id="detailName"></h2>
+            <button class="detail-open-btn" id="detailOpen" title="Open Project"><i class="codicon codicon-folder"></i><i class="codicon codicon-folder-opened"></i></button>
+          </div>
           <p class="detail-path" id="detailPath"></p>
           <div class="detail-meta" id="detailMeta"></div>
-          <button class="btn btn-primary detail-open" id="detailOpen">
-            <i class="codicon codicon-folder-opened"></i> Open Project
-          </button>
         </div>
       </div>
     </div>
