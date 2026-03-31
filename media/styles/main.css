@@ -827,7 +827,14 @@ body.modal-open {
   justify-content: center;
 }
 
-.detail-poster-content svg {
+.detail-poster-content svg,
+.detail-poster-content > div {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.detail-poster-content > div svg {
   display: block;
   width: 100%;
   height: 100%;
