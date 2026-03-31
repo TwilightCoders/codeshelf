@@ -79,6 +79,12 @@ async function tryWorkspaceBookset(dir: string, shelfMeta?: ShelfMeta): Promise<
   const wsInfo = await parseWorkspaceFile(dir);
   if (!wsInfo || wsInfo.folders.length <= 1) return null;
 
+  // If one of the folders is "." (the directory itself), this is a single
+  // project with extra folders included — not a multi-project bookset
+  const resolvedDir = path.resolve(dir);
+  const hasSelfRef = wsInfo.folders.some(f => path.resolve(f) === resolvedDir);
+  if (hasSelfRef) return null;
+
   // Multi-folder workspace → each folder is a sub-project
   const items: ShelfItem[] = [];
   for (const folderPath of wsInfo.folders) {
