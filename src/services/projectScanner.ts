@@ -253,7 +253,9 @@ export async function scanRoots(
           n + (item.kind === 'project' ? 1 : item.projects.length), 0);
 
         // Single-project shelves → absorb into loose projects
-        if (totalProjects <= 3) {
+        // Don't absorb shelves the user has explicitly configured
+        const hasExplicitMeta = shelfMeta && Object.keys(shelfMeta).length > 0;
+        if (totalProjects <= 3 && !hasExplicitMeta) {
           for (const item of items) {
             if (item.kind === 'project') {
               looseProjects.push({ kind: 'project', project: { ...item.project, name: `${topDir.name}/${item.project.name}` } });

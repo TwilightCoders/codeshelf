@@ -231,9 +231,8 @@ export class CodeShelfPanel {
         : parts[0];
       if (!root.shelves[shelfKey]) root.shelves[shelfKey] = {};
       applyUpdates(root.shelves[shelfKey] as Record<string, unknown>);
-      if (Object.keys(root.shelves[shelfKey]).length === 0) {
-        delete root.shelves[shelfKey];
-      }
+      // Keep empty shelf entries — they signal "user configured this shelf"
+      // which prevents absorption into the loose Projects row
     } else {
       // Deeper → it's a project inside a shelf
       const shelfName = parts[0];
