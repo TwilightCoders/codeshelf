@@ -154,6 +154,7 @@
     "watch:webview": "node esbuild.mjs --watch",
     "dev": "node esbuild.mjs && open dev.html",
     "dev:watch": "node esbuild.mjs --watch",
+    "screenshot": "node esbuild.mjs && node scripts/screenshot.mjs",
     "vscode:prepublish": "npm run compile",
     "package": "vsce package"
   },
