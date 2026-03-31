@@ -9,11 +9,13 @@ interface Props {
   query: string;
   booksetThreshold: number;
   forgingPaths: Set<string>;
+  sortBy: 'date' | 'name' | 'language';
+  staleFade: boolean;
   onProjectClick: (path: string) => void;
   onShelfClick: (shelf: Shelf) => void;
 }
 
-export function RootGroup({ label, shelves, hiddenShelves, query, booksetThreshold, forgingPaths, onProjectClick, onShelfClick }: Props) {
+export function RootGroup({ label, shelves, hiddenShelves, query, booksetThreshold, forgingPaths, sortBy, staleFade, onProjectClick, onShelfClick }: Props) {
   const [collapsed, setCollapsed] = useState(false);
 
   const sorted = [...shelves].sort((a, b) => {
@@ -38,7 +40,8 @@ export function RootGroup({ label, shelves, hiddenShelves, query, booksetThresho
         <div className="root-shelves">
           {sorted.map(shelf => (
             <ShelfRow key={shelf.path} shelf={shelf} query={query} booksetThreshold={booksetThreshold}
-              forgingPaths={forgingPaths} onProjectClick={onProjectClick} onShelfClick={onShelfClick} />
+              forgingPaths={forgingPaths} sortBy={sortBy} staleFade={staleFade}
+              onProjectClick={onProjectClick} onShelfClick={onShelfClick} />
           ))}
         </div>
       )}

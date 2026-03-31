@@ -25,6 +25,8 @@ function App() {
     syncText: '', syncVisible: false, forgingPaths: new Set(),
   });
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'date' | 'name' | 'language'>('date');
+  const [staleFade, setStaleFade] = useState(false);
   const [projectDetail, setProjectDetail] = useState<{ project: Project; rootPath: string } | null>(null);
   const [shelfDetail, setShelfDetail] = useState<Shelf | null>(null);
 
@@ -133,6 +135,7 @@ function App() {
         shelves={state.shelves} searchQuery={searchQuery} onSearchChange={setSearchQuery}
         syncText={state.syncText} syncVisible={state.syncVisible}
         booksetThreshold={state.booksetThreshold} forgingPaths={state.forgingPaths}
+        sortBy={sortBy} onSortChange={setSortBy} staleFade={staleFade} onStaleFadeToggle={() => setStaleFade(!staleFade)}
         onProjectClick={openProjectDetail} onShelfClick={openShelfDetail}
       />
       {shelfDetail && (
@@ -173,13 +176,16 @@ function LoadingScreen() {
 
 // ── Shelf Screen ──
 
+type SortBy = 'date' | 'name' | 'language';
+
 interface ShelfScreenProps {
   shelves: Shelf[]; searchQuery: string; onSearchChange: (q: string) => void;
   syncText: string; syncVisible: boolean; booksetThreshold: number; forgingPaths: Set<string>;
+  sortBy: SortBy; onSortChange: (s: SortBy) => void; staleFade: boolean; onStaleFadeToggle: () => void;
   onProjectClick: (path: string) => void; onShelfClick: (shelf: Shelf) => void;
 }
 
-function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisible, booksetThreshold, forgingPaths, onProjectClick, onShelfClick }: ShelfScreenProps) {
+function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisible, booksetThreshold, forgingPaths, sortBy, onSortChange, staleFade, onStaleFadeToggle, onProjectClick, onShelfClick }: ShelfScreenProps) {
   const q = searchQuery.toLowerCase().trim();
 
   const grouped = new Map<string, Shelf[]>();
@@ -211,6 +217,14 @@ function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisib
             <input type="text" className="search-input" placeholder="Search projects..." value={searchQuery} onChange={e => onSearchChange(e.target.value)} />
             {searchQuery && <button className="search-clear" onClick={() => onSearchChange('')}>&times;</button>}
           </div>
+          <select className="sort-select" value={sortBy} onChange={e => onSortChange(e.target.value as SortBy)} title="Sort projects">
+            <option value="date">Recent</option>
+            <option value="name">A-Z</option>
+            <option value="language">Language</option>
+          </select>
+          <button className={`btn btn-ghost ${staleFade ? 'active' : ''}`} title="Fade stale projects" onClick={onStaleFadeToggle}>
+            <i className="codicon codicon-clock" />
+          </button>
           <button className="btn btn-ghost" title="Add root" onClick={() => postMsg({ type: 'settings:pickRoot' })}><i className="codicon codicon-add" /></button>
           <button className="btn btn-ghost" title="Rescan" onClick={() => postMsg({ type: 'projects:requestScan' })}><i className="codicon codicon-refresh" /></button>
           <button className="btn btn-ghost" title="Settings (JSON)" onClick={() => postMsg({ type: 'settings:openJson' })}><i className="codicon codicon-settings-gear" /></button>
@@ -222,6 +236,7 @@ function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisib
           return (
             <RootGroup key={rootLabel} label={rootLabel} shelves={rootShelves} hiddenShelves={hidden}
               query={q} booksetThreshold={booksetThreshold} forgingPaths={forgingPaths}
+              sortBy={sortBy} staleFade={staleFade}
               onProjectClick={onProjectClick} onShelfClick={onShelfClick} />
           );
         })}

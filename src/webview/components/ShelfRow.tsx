@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Shelf } from '../../shared/types';
-import { postMsg, collectProjects, flattenBooksets, sortProjects } from './helpers';
+import { postMsg, collectProjects, flattenBooksets } from './helpers';
 import { ProjectCard } from './ProjectCard';
 
 interface Props {
@@ -8,11 +8,13 @@ interface Props {
   query: string;
   booksetThreshold: number;
   forgingPaths: Set<string>;
+  sortBy: 'date' | 'name' | 'language';
+  staleFade: boolean;
   onProjectClick: (path: string) => void;
   onShelfClick: (shelf: Shelf) => void;
 }
 
-export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, onProjectClick, onShelfClick }: Props) {
+export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy, staleFade, onProjectClick, onShelfClick }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [inlineFilter, setInlineFilter] = useState('');
 
@@ -32,7 +34,15 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, onProje
   }
   if (projects.length === 0) return null;
 
-  projects = sortProjects(projects);
+  // Sort: starred first, then by user-selected sort
+  projects = [...projects].sort((a, b) => {
+    if (a.starred !== b.starred) return a.starred ? -1 : 1;
+    switch (sortBy) {
+      case 'name': return a.name.localeCompare(b.name);
+      case 'language': return (a.primaryLanguage ?? '').localeCompare(b.primaryLanguage ?? '');
+      default: return b.lastModified - a.lastModified;
+    }
+  });
   const isCompact = projects.length <= 3;
 
   return (
@@ -57,7 +67,7 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, onProje
       {!collapsed && (
         <div className="shelf-row-content">
           {projects.map(p => (
-            <ProjectCard key={p.path} project={p} rootPath={shelf.rootPath} forging={forgingPaths.has(p.path)} onClick={() => onProjectClick(p.path)} />
+            <ProjectCard key={p.path} project={p} rootPath={shelf.rootPath} forging={forgingPaths.has(p.path)} staleFade={staleFade} onClick={() => onProjectClick(p.path)} />
           ))}
         </div>
       )}

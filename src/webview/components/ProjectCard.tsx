@@ -5,17 +5,29 @@ interface Props {
   project: Project;
   rootPath: string;
   forging: boolean;
+  staleFade?: boolean;
   onClick: () => void;
 }
 
-export function ProjectCard({ project, rootPath, forging, onClick }: Props) {
+function stalenessOpacity(lastModified: number): number {
+  const daysAgo = (Date.now() - lastModified) / (1000 * 60 * 60 * 24);
+  if (daysAgo < 7) return 1;
+  if (daysAgo < 30) return 0.9;
+  if (daysAgo < 90) return 0.75;
+  if (daysAgo < 365) return 0.6;
+  return 0.45;
+}
+
+export function ProjectCard({ project, rootPath, forging, staleFade, onClick }: Props) {
   const lang = project.primaryLanguage;
   const bgColor = lang ? LANGUAGE_COLORS[lang] ?? hashColor(project.name) : hashColor(project.name);
   const badge = lang ? LANGUAGE_ICONS[lang] ?? lang.slice(0, 2).toUpperCase() : '';
   const hasPoster = !!project.poster;
+  const opacity = staleFade ? stalenessOpacity(project.lastModified) : 1;
 
   return (
-    <div className={`project-card ${hasPoster ? 'has-poster' : ''} ${forging ? 'forging' : ''}`} title={project.path} onClick={onClick}>
+    <div className={`project-card ${hasPoster ? 'has-poster' : ''} ${forging ? 'forging' : ''}`}
+      title={project.path} onClick={onClick} style={{ opacity, transition: 'opacity 0.3s ease' }}>
       <div className={`card-poster-flip ${hasPoster ? 'flipped' : ''}`}>
         <div className="card-poster-face card-poster-fallback" style={{ backgroundColor: bgColor }}>
           {badge && <span className="card-badge">{badge}</span>}

@@ -154,6 +154,27 @@ body {
   gap: 8px;
 }
 
+.sort-select {
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+}
+
+.sort-select:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+.btn-ghost.active {
+  opacity: 1;
+  color: var(--vscode-textLink-foreground, #3794ff);
+}
+
 .search-wrapper {
   position: relative;
   display: flex;
