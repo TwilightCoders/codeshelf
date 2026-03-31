@@ -169,6 +169,72 @@ async function scanDirectory(
   return { projects, groups };
 }
 
+// ── Recursive rollup heuristic ──
+// If a group (bookset) has ≤threshold total projects, flatten it:
+// prefix each project name with the group name and push up to the parent.
+// Works bottom-up recursively through the tree.
+
+const ROLLUP_THRESHOLD = 3;
+
+function rollupItems(items: ShelfItem[]): ShelfItem[] {
+  const result: ShelfItem[] = [];
+
+  for (const item of items) {
+    if (item.kind === 'project') {
+      result.push(item);
+    } else {
+      // It's a bookset — check if it should be rolled up
+      if (item.projects.length <= ROLLUP_THRESHOLD) {
+        // Roll up: prefix each project name with the bookset name
+        for (const p of item.projects) {
+          result.push({
+            kind: 'project',
+            project: { ...p, name: `${item.name}/${p.name}` },
+          });
+        }
+      } else {
+        // Keep as bookset
+        result.push(item);
+      }
+    }
+  }
+
+  return result;
+}
+
+// After rolling up booksets, check if the entire shelf is small enough
+// to be absorbed into the loose projects row.
+// Returns null if should be absorbed, or the items if it should stay as a shelf.
+function rollupShelf(
+  items: ShelfItem[],
+  shelfName: string,
+  hasExplicitMeta: boolean,
+): { keep: true; items: ShelfItem[] } | { keep: false; looseProjects: ShelfItem[] } {
+  // First, recursively roll up small booksets
+  const rolled = rollupItems(items);
+
+  // Count total projects after rollup
+  const totalProjects = rolled.reduce((n, item) =>
+    n + (item.kind === 'project' ? 1 : item.projects.length), 0);
+
+  // If still small and no explicit metadata, absorb into loose projects
+  if (totalProjects <= ROLLUP_THRESHOLD && !hasExplicitMeta) {
+    const loose: ShelfItem[] = [];
+    for (const item of rolled) {
+      if (item.kind === 'project') {
+        loose.push({ kind: 'project', project: { ...item.project, name: `${shelfName}/${item.project.name}` } });
+      } else {
+        for (const p of item.projects) {
+          loose.push({ kind: 'project', project: { ...p, name: `${shelfName}/${p.name}` } });
+        }
+      }
+    }
+    return { keep: false, looseProjects: loose };
+  }
+
+  return { keep: true, items: rolled };
+}
+
 // ── Main scan ──
 
 export async function scanRoots(
@@ -249,24 +315,16 @@ export async function scanRoots(
       }
 
       if (items.length > 0) {
-        const totalProjects = items.reduce((n, item) =>
-          n + (item.kind === 'project' ? 1 : item.projects.length), 0);
-
-        // Single-project shelves → absorb into loose projects
-        // Don't absorb shelves the user has explicitly configured
         const hasExplicitMeta = shelfMeta && Object.keys(shelfMeta).length > 0;
-        if (totalProjects <= 3 && !hasExplicitMeta) {
-          for (const item of items) {
-            if (item.kind === 'project') {
-              looseProjects.push({ kind: 'project', project: { ...item.project, name: `${topDir.name}/${item.project.name}` } });
-            } else {
-              for (const p of item.projects) {
-                looseProjects.push({ kind: 'project', project: { ...p, name: `${topDir.name}/${p.name}` } });
-              }
-            }
-          }
+        const rollupResult = rollupShelf(items, topDir.name, !!hasExplicitMeta);
+
+        if (!rollupResult.keep) {
+          // Absorbed into loose projects
+          looseProjects.push(...rollupResult.looseProjects);
         } else {
-          items.sort((a, b) => {
+          // Keep as its own shelf (with booksets already rolled up)
+          const finalItems = rollupResult.items;
+          finalItems.sort((a, b) => {
             if (a.kind !== b.kind) return a.kind === 'bookset' ? -1 : 1;
             if (a.kind === 'project' && b.kind === 'project') return b.project.lastModified - a.project.lastModified;
             return 0;
@@ -280,7 +338,7 @@ export async function scanRoots(
             starred: shelfMeta?.starred,
             hidden: shelfMeta?.hidden,
             flatten: shelfMeta?.flatten,
-            items,
+            items: finalItems,
           });
         }
       }
