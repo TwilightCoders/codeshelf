@@ -278,17 +278,23 @@ export async function scanRoots(
       // Check for workspace-as-bookset at the shelf level
       const wsItems = await tryWorkspaceBookset(topDir.path, shelfMeta);
       if (wsItems) {
-        // Multi-folder workspace at shelf level → becomes a shelf with those items
-        shelves.push({
-          name: shelfMeta?.name ?? topDir.name,
-          path: topDir.path,
-          rootLabel,
-          rootPath: expandedRoot,
-          starred: shelfMeta?.starred,
-          hidden: shelfMeta?.hidden,
-          flatten: shelfMeta?.flatten,
-          items: wsItems,
-        });
+        // Multi-folder workspace — run through rollup like any other shelf
+        const hasExplicitMeta = shelfMeta && Object.keys(shelfMeta).length > 0;
+        const rollupResult = rollupShelf(wsItems, topDir.name, !!hasExplicitMeta);
+        if (!rollupResult.keep) {
+          looseProjects.push(...rollupResult.looseProjects);
+        } else {
+          shelves.push({
+            name: shelfMeta?.name ?? topDir.name,
+            path: topDir.path,
+            rootLabel,
+            rootPath: expandedRoot,
+            starred: shelfMeta?.starred,
+            hidden: shelfMeta?.hidden,
+            flatten: shelfMeta?.flatten,
+            items: rollupResult.items,
+          });
+        }
         continue;
       }
 
