@@ -138,10 +138,14 @@ function App() {
         sortBy={sortBy} onSortChange={setSortBy} staleFade={staleFade} onStaleFadeToggle={() => setStaleFade(!staleFade)}
         onProjectClick={openProjectDetail} onShelfClick={openShelfDetail}
       />
-      {shelfDetail && (
-        <ShelfDetailModal shelf={shelfDetail} onClose={closeShelfDetail}
-          onProjectClick={openProjectDetail} forgingPaths={state.forgingPaths} />
-      )}
+      {shelfDetail && (() => {
+        // Always use the latest shelf data from state
+        const currentShelf = state.shelves.find(s => s.path === shelfDetail.path) ?? shelfDetail;
+        return (
+          <ShelfDetailModal shelf={currentShelf} onClose={closeShelfDetail}
+            onProjectClick={openProjectDetail} forgingPaths={state.forgingPaths} />
+        );
+      })()}
       {projectDetail && (
         <ProjectDetailModal project={projectDetail.project} rootPath={projectDetail.rootPath}
           forging={state.forgingPaths.has(projectDetail.project.path)} onClose={closeProjectDetail} />

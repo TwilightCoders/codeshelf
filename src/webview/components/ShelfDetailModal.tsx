@@ -26,7 +26,7 @@ export function ShelfDetailModal({ shelf, onClose, onProjectClick, forgingPaths 
             <button className={`action-btn ${shelf.starred ? 'starred' : ''}`} title="Star shelf" onClick={() => postMsg({ type: 'item:star', path: shelf.path, rootPath: shelf.rootPath, starred: !shelf.starred })}>
               <i className={`codicon codicon-star-${shelf.starred ? 'full' : 'empty'}`} />
             </button>
-            <button className="action-btn" title={shelf.hidden ? 'Unhide shelf' : 'Hide shelf'} onClick={() => { postMsg({ type: 'item:hide', path: shelf.path, rootPath: shelf.rootPath, hidden: !shelf.hidden }); onClose(); }}>
+            <button className="action-btn" title={shelf.hidden ? 'Unhide shelf' : 'Hide shelf'} onClick={() => { postMsg({ type: 'item:hide', path: shelf.path, rootPath: shelf.rootPath, hidden: !shelf.hidden }); if (!shelf.hidden) onClose(); }}>
               <i className={`codicon codicon-${shelf.hidden ? 'eye' : 'eye-closed'}`} />
             </button>
             <button className="action-btn" title="Reveal in Finder" onClick={() => postMsg({ type: 'folder:reveal', path: shelf.path })}>
