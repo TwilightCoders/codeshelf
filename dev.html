@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="node_modules/@vscode/codicons/dist/codicon.css">
+  <link rel="stylesheet" href="media/styles/main.css">
+  <title>CodeShelf Dev</title>
+  <style>
+    /* Mock VS Code theme variables for browser preview */
+    :root {
+      --vscode-editor-background: #1e1e1e;
+      --vscode-editor-foreground: #cccccc;
+      --vscode-sideBar-background: #252526;
+      --vscode-sideBar-foreground: #cccccc;
+      --vscode-input-background: #3c3c3c;
+      --vscode-input-foreground: #cccccc;
+      --vscode-input-border: #3c3c3c;
+      --vscode-input-placeholderForeground: #717171;
+      --vscode-button-background: #0e639c;
+      --vscode-button-foreground: #ffffff;
+      --vscode-button-hoverBackground: #1177bb;
+      --vscode-focusBorder: #007fd4;
+      --vscode-descriptionForeground: #969696;
+      --vscode-panel-border: rgba(255,255,255,0.08);
+      --vscode-badge-background: #4d4d4d;
+      --vscode-badge-foreground: #cccccc;
+      --vscode-list-hoverBackground: #2a2d2e;
+      --vscode-toolbar-hoverBackground: rgba(90,93,94,0.31);
+      --vscode-textLink-foreground: #3794ff;
+      --vscode-menu-background: #252526;
+      --vscode-menu-foreground: #cccccc;
+      --vscode-menu-selectionBackground: #04395e;
+      --vscode-menu-border: #454545;
+      --vscode-errorForeground: #f44;
+      --vscode-font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      --vscode-font-size: 13px;
+      --vscode-editor-font-family: 'SF Mono', Menlo, Monaco, monospace;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    // Mock acquireVsCodeApi for browser dev
+    window.acquireVsCodeApi = function() {
+      return {
+        postMessage(msg) {
+          console.log('[postMessage]', msg.type, msg);
+          // Simulate responses for certain messages
+          if (msg.type === 'ready') {
+            setTimeout(() => {
+              window.postMessage({ type: 'settings:state', hasRoots: true, booksetThreshold: 8 }, '*');
+            }, 100);
+            setTimeout(() => {
+              window.postMessage({ type: 'projects:loaded', shelves: window.__MOCK_SHELVES__ || [] }, '*');
+            }, 300);
+          }
+        },
+        getState() { return null; },
+        setState(state) { console.log('[setState]', state); },
+      };
+    };
+
+    // Mock shelf data
+    window.__MOCK_SHELVES__ = [
+      {
+        name: 'Gems', path: '/mock/code/Gems', rootLabel: 'Code', rootPath: '/mock/code',
+        items: [
+          { kind: 'project', project: { name: 'glossary', path: '/mock/code/Gems/glossary', markers: ['.git', '*.gemspec'], primaryLanguage: 'ruby', gitBranch: 'main', lastModified: Date.now() - 86400000 * 2, starred: true } },
+          { kind: 'project', project: { name: 'task_queue-redis', path: '/mock/code/Gems/task_queue-redis', markers: ['.git', '*.gemspec'], primaryLanguage: 'ruby', gitBranch: 'overhaul', lastModified: Date.now() - 86400000 * 30 } },
+          { kind: 'project', project: { name: 'radio-client', path: '/mock/code/Gems/radio-client', markers: ['.git', '*.gemspec'], primaryLanguage: 'ruby', gitBranch: 'main', lastModified: Date.now() - 86400000 * 180 } },
+          { kind: 'project', project: { name: 'created_at', path: '/mock/code/Gems/created_at', markers: ['.git', '*.gemspec'], primaryLanguage: 'ruby', gitBranch: 'main', lastModified: Date.now() - 86400000 * 365 } },
+        ],
+      },
+      {
+        name: 'Apps', path: '/mock/code/Apps', rootLabel: 'Code', rootPath: '/mock/code',
+        items: [
+          { kind: 'project', project: { name: 'Harbor', path: '/mock/code/Apps/Harbor', markers: ['.git', '*.xcodeproj'], primaryLanguage: 'swift', gitBranch: 'master', lastModified: Date.now() - 86400000 } },
+          { kind: 'project', project: { name: 'Snooze', path: '/mock/code/Apps/Snooze', markers: ['.git', '*.xcodeproj'], primaryLanguage: 'swift', gitBranch: 'main', lastModified: Date.now() - 86400000 * 3 } },
+        ],
+      },
+      {
+        name: 'vscode', path: '/mock/code/vscode', rootLabel: 'Code', rootPath: '/mock/code',
+        items: [
+          { kind: 'project', project: { name: 'termkit', path: '/mock/code/vscode/termkit', markers: ['.git', 'package.json'], primaryLanguage: 'javascript', gitBranch: 'main', lastModified: Date.now() - 3600000 } },
+          { kind: 'project', project: { name: 'startpage', path: '/mock/code/vscode/startpage', markers: ['.git', 'package.json'], primaryLanguage: 'javascript', gitBranch: 'react-migration', lastModified: Date.now() - 600000 } },
+        ],
+      },
+      {
+        name: 'Other', path: '/mock/Workspace/Other', rootLabel: 'Workspace', rootPath: '/mock/Workspace',
+        items: [
+          { kind: 'project', project: { name: 'flock', path: '/mock/Workspace/Other/flock', markers: ['.git', 'Makefile'], primaryLanguage: 'make', gitBranch: 'master', lastModified: Date.now() - 86400000 * 7 } },
+          { kind: 'project', project: { name: 'xterm-link-provider', path: '/mock/Workspace/Other/xterm-link-provider', markers: ['.git', 'package.json'], primaryLanguage: 'javascript', gitBranch: 'fix-indexOf', lastModified: Date.now() - 86400000 * 14 } },
+        ],
+      },
+      {
+        name: 'Archive', path: '/mock/Workspace/Archive', rootLabel: 'Workspace', rootPath: '/mock/Workspace', hidden: true,
+        items: [
+          { kind: 'project', project: { name: 'old-project', path: '/mock/Workspace/Archive/old-project', markers: ['.git'], gitBranch: 'master', lastModified: Date.now() - 86400000 * 400 } },
+        ],
+      },
+    ];
+  </script>
+  <script src="out-webview/webview/main.js"></script>
+</body>
+</html>

@@ -152,6 +152,8 @@
     "compile:check": "tsc -p ./ && tsc -p ./tsconfig.webview.json --noEmit",
     "watch": "tsc -watch -p ./",
     "watch:webview": "node esbuild.mjs --watch",
+    "dev": "node esbuild.mjs && open dev.html",
+    "dev:watch": "node esbuild.mjs --watch",
     "vscode:prepublish": "npm run compile",
     "package": "vsce package"
   },
