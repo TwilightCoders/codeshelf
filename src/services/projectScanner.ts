@@ -14,9 +14,28 @@ async function exists(p: string): Promise<boolean> {
   try { await fs.promises.access(p); return true; } catch { return false; }
 }
 
+async function isWorktree(dir: string): Promise<boolean> {
+  const gitPath = path.join(dir, '.git');
+  try {
+    const stat = await fs.promises.stat(gitPath);
+    // Real repos have .git as a directory; worktrees have .git as a file
+    // containing "gitdir: /path/to/main/.git/worktrees/name"
+    return stat.isFile();
+  } catch {
+    return false;
+  }
+}
+
 async function detectMarkers(dir: string): Promise<string[]> {
   const found: string[] = [];
   for (const marker of Object.keys(PROJECT_MARKERS)) {
+    if (marker === '.git') {
+      // Only count .git if it's a real repo, not a worktree
+      if (await exists(path.join(dir, marker)) && !await isWorktree(dir)) {
+        found.push(marker);
+      }
+      continue;
+    }
     if (await exists(path.join(dir, marker))) found.push(marker);
   }
   try {
