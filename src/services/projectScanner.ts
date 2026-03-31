@@ -131,7 +131,7 @@ async function scanDirectory(
     // Check for workspace-as-bookset first
     const wsItems = await tryWorkspaceBookset(subdir, shelfMeta);
     if (wsItems) {
-      const groupName = namePrefix ? `${namePrefix} / ${path.basename(subdir)}` : path.basename(subdir);
+      const groupName = namePrefix ? `${namePrefix}/${path.basename(subdir)}` : path.basename(subdir);
       groups.push({ name: groupName, path: subdir, projects: wsItems.map(i => (i as { kind: 'project'; project: Project }).project) });
       continue;
     }
@@ -140,13 +140,18 @@ async function scanDirectory(
     if (markers.length > 0) {
       const pMeta = resolveProjectMeta(subdir, shelfMeta);
       if (!pMeta?.hidden) {
-        projects.push(await buildProject(subdir, markers, pMeta));
+        const project = await buildProject(subdir, markers, pMeta);
+        // Apply collapsed name prefix if we're inside a single-child chain
+        if (namePrefix) {
+          project.name = `${namePrefix}/${project.name}`;
+        }
+        projects.push(project);
       }
     } else if (currentDepth < maxDepth) {
       // Check for single-child collapse
       const childEntries = await fs.promises.readdir(subdir, { withFileTypes: true }).catch(() => []);
       const childDirs = (childEntries as fs.Dirent[]).filter(e => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.'));
-      const subdirName = namePrefix ? `${namePrefix} / ${path.basename(subdir)}` : path.basename(subdir);
+      const subdirName = namePrefix ? `${namePrefix}/${path.basename(subdir)}` : path.basename(subdir);
 
       if (childDirs.length === 1) {
         // Single-child collapse: recurse deeper with concatenated name
