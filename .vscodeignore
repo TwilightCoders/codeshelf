@@ -3,4 +3,15 @@ src/**
 tsconfig*.json
 *.map
 .gitignore
+.Codex/**
+.claude/**
+test/**
+dev.html
+eslint.config.mjs
+.prettierrc.json
+vitest*.config.ts
+esbuild.mjs
+
+# Drop all of node_modules EXCEPT the codicons font/css the webview loads at runtime
 node_modules/**
+!node_modules/@vscode/codicons/**

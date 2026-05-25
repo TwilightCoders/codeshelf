@@ -2,8 +2,6 @@
 
 A Steam Library-style project browser for VS Code. Point CodeShelf at the directories where your projects live and it renders them as a browsable wall of cards — grouped into shelves, with language badges, git branch, last-modified times, and optional generated poster art.
 
-![CodeShelf](media/icons/codeshelf-dark.svg)
-
 ## Features
 
 - **Automatic project discovery** — scans your configured roots for projects, detecting them by well-known markers (`package.json`, `Cargo.toml`, `go.mod`, `Gemfile`, `pyproject.toml`, `.git`, and more).
