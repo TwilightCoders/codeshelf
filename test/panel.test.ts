@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeDiff, collectProjectPaths, transformSvg, applyItemMeta } from '../src/providers/codeshelfPanel';
+import { computeDiff, collectProjectPaths, transformSvg, sanitizeSvg, applyItemMeta } from '../src/providers/codeshelfPanel';
 import type { Shelf, RootsConfig } from '../src/shared/types';
 
 // ── Helpers ──
@@ -155,6 +155,60 @@ describe('transformSvg', () => {
     const result = transformSvg(input)!;
     expect(result).toContain('<rect x="0" y="0"/>');
     expect(result).toContain('<text>hello</text>');
+  });
+});
+
+// ── sanitizeSvg ──
+
+describe('sanitizeSvg', () => {
+  it('strips <script> blocks', () => {
+    const input = '<svg><script>alert(1)</script><rect/></svg>';
+    const result = sanitizeSvg(input);
+    expect(result).not.toContain('<script');
+    expect(result).not.toContain('alert(1)');
+    expect(result).toContain('<rect/>');
+  });
+
+  it('strips self-closing <script/> tags', () => {
+    const input = '<svg><script src="evil.js"/><rect/></svg>';
+    expect(sanitizeSvg(input)).not.toContain('<script');
+  });
+
+  it('strips inline event-handler attributes', () => {
+    const input = '<svg onload="steal()"><rect onclick=\'go()\'/></svg>';
+    const result = sanitizeSvg(input);
+    expect(result).not.toContain('onload');
+    expect(result).not.toContain('onclick');
+  });
+
+  it('strips <foreignObject> content', () => {
+    const input = '<svg><foreignObject><body onload="x()"/></foreignObject><rect/></svg>';
+    const result = sanitizeSvg(input);
+    expect(result).not.toContain('foreignObject');
+    expect(result).toContain('<rect/>');
+  });
+
+  it('neutralizes javascript: URLs in href', () => {
+    const input = '<svg><a href="javascript:alert(1)"><rect/></a></svg>';
+    const result = sanitizeSvg(input);
+    expect(result).not.toContain('javascript:');
+    expect(result).toContain('href="#"');
+  });
+
+  it('leaves benign SVG untouched', () => {
+    const input = '<svg viewBox="0 0 10 10"><rect x="1" y="1" fill="#fff"/></svg>';
+    expect(sanitizeSvg(input)).toBe(input);
+  });
+});
+
+// ── transformSvg sanitizes too ──
+
+describe('transformSvg sanitization', () => {
+  it('removes scripts while normalizing the svg tag', () => {
+    const input = '<svg width="400" height="240"><script>evil()</script><rect/></svg>';
+    const result = transformSvg(input)!;
+    expect(result).not.toContain('<script');
+    expect(result).toContain('viewBox="0 0 400 240"');
   });
 });
 

@@ -1,8 +1,12 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
 import { ExtToWebview, WebviewToExt, Shelf, ScanDiff, RootsConfig, Project } from '../shared/types';
+import { STORAGE_KEYS } from '../shared/constants';
 import { scanRoots } from '../services/projectScanner';
 import { detectCapabilities } from '../services/capabilities';
 import { PosterGenerator } from '../services/posterGenerator';
+import { renderWebviewHtml } from './htmlTemplate';
 
 export function collectProjectPaths(shelves: Shelf[]): Set<string> {
   const paths = new Set<string>();
@@ -36,14 +40,32 @@ export function computeDiff(oldShelves: Shelf[], newShelves: Shelf[]): ScanDiff 
 }
 
 /**
+ * Strip active content from SVG markup before it is injected via
+ * dangerouslySetInnerHTML. The webview CSP already blocks inline <script>,
+ * but SVG can also carry event-handler attributes, <foreignObject> HTML, and
+ * javascript: URLs — remove those as defense-in-depth.
+ */
+export function sanitizeSvg(svg: string): string {
+  return svg
+    .replace(/<script\b[\s\S]*?<\/script>/gi, '')
+    .replace(/<script\b[^>]*\/>/gi, '')
+    .replace(/<foreignObject\b[\s\S]*?<\/foreignObject>/gi, '')
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
+    .replace(/((?:xlink:)?href)\s*=\s*"\s*javascript:[^"]*"/gi, '$1="#"')
+    .replace(/((?:xlink:)?href)\s*=\s*'\s*javascript:[^']*'/gi, "$1='#'");
+}
+
+/**
  * Transform raw SVG markup for proper embedding:
+ * - Sanitize active content (scripts, event handlers, foreignObject)
  * - Add viewBox from width/height if missing
  * - Strip hardcoded width/height
  * - Add preserveAspectRatio for cover-style scaling
  */
 export function transformSvg(svg: string): string | undefined {
   if (!svg.includes('<svg')) return undefined;
-  return svg.replace(/<svg([^>]*)>/, (_match: string, attrs: string) => {
+  return sanitizeSvg(svg).replace(/<svg([^>]*)>/, (_match: string, attrs: string) => {
     let newAttrs = attrs;
     const wMatch = attrs.match(/width="(\d+)"/);
     const hMatch = attrs.match(/height="(\d+)"/);
@@ -71,7 +93,6 @@ export function applyItemMeta(
   updates: Record<string, unknown>,
   homePath?: string,
 ): RootsConfig {
-  const pathModule = require('path');
   const rootKey = Object.keys(rootsConfig).find(k =>
     k === rootPath || k.replace(/^~/, homePath ?? '') === rootPath
   );
@@ -81,8 +102,8 @@ export function applyItemMeta(
   const root = rootsConfig[rootKey];
   if (!root.shelves) root.shelves = {};
 
-  const relativePath = pathModule.relative(expandedRoot, itemPath);
-  const parts: string[] = relativePath.split(pathModule.sep);
+  const relativePath = path.relative(expandedRoot, itemPath);
+  const parts: string[] = relativePath.split(path.sep);
 
   const applyUpdates = (obj: Record<string, unknown>) => {
     for (const [key, value] of Object.entries(updates)) {
@@ -95,19 +116,16 @@ export function applyItemMeta(
   };
 
   if (parts.length === 1) {
-    const shelfKey = root.shelves[itemPath] ? itemPath
-      : root.shelves[parts[0]] ? parts[0]
-      : parts[0];
+    // Prefer an existing full-path key, otherwise key by the shelf's basename.
+    const shelfKey = root.shelves[itemPath] ? itemPath : parts[0];
     if (!root.shelves[shelfKey]) root.shelves[shelfKey] = {};
     applyUpdates(root.shelves[shelfKey] as Record<string, unknown>);
   } else {
-    const shelfName = parts[0];
-    const projectName = pathModule.basename(itemPath);
-    const shelfKey = root.shelves[shelfName] ? shelfName : shelfName;
+    const shelfKey = parts[0];
+    const projKey = path.basename(itemPath);
     if (!root.shelves[shelfKey]) root.shelves[shelfKey] = {};
     const shelf = root.shelves[shelfKey];
     if (!shelf.projects) shelf.projects = {};
-    const projKey = shelf.projects[projectName] ? projectName : projectName;
     if (!shelf.projects[projKey]) shelf.projects[projKey] = {};
     applyUpdates(shelf.projects[projKey] as Record<string, unknown>);
     if (Object.keys(shelf.projects[projKey]).length === 0) {
@@ -140,8 +158,8 @@ function getConfig() {
 export class CodeShelfPanel {
   public static readonly viewType = 'codeshelf.startPage';
   private static instance: CodeShelfPanel | undefined;
-  private static readonly CACHE_KEY = 'codeshelf.cachedShelves';
-  private static readonly PROMPTS_KEY = 'codeshelf.posterPrompts';
+  private static readonly CACHE_KEY = STORAGE_KEYS.cachedShelves;
+  private static readonly PROMPTS_KEY = STORAGE_KEYS.posterPrompts;
 
   private readonly panel: vscode.WebviewPanel;
   private readonly context: vscode.ExtensionContext;
@@ -159,7 +177,7 @@ export class CodeShelfPanel {
     );
 
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
-    this.panel.webview.html = this.getHtml();
+    this.panel.webview.html = renderWebviewHtml(this.panel.webview, this.context.extensionUri);
   }
 
   public static createOrShow(context: vscode.ExtensionContext) {
@@ -359,7 +377,7 @@ export class CodeShelfPanel {
       // Delete existing cached poster so regeneration works
       const existingPath = this.posterGenerator.getCachedPosterPath(project);
       if (existingPath) {
-        await require('fs').promises.unlink(existingPath).catch(() => {});
+        await fs.promises.unlink(existingPath).catch(() => {});
       }
 
       await this.posterGenerator.generateOne(project, userNotes || undefined);
@@ -393,15 +411,13 @@ export class CodeShelfPanel {
     if (!project) return;
 
     const sourcePath = picked[0].fsPath;
-    const fs = require('fs');
-    const path = require('path');
 
     // Copy to cache dir
-    const cacheDir = require('path').join(this.context.globalStorageUri.fsPath, 'posters');
+    const cacheDir = path.join(this.context.globalStorageUri.fsPath, 'posters');
     await fs.promises.mkdir(cacheDir, { recursive: true });
     const hash = Buffer.from(project.path).toString('base64url');
     const ext = path.extname(sourcePath);
-    const destPath = require('path').join(cacheDir, `${hash}${ext}`);
+    const destPath = path.join(cacheDir, `${hash}${ext}`);
 
     // Remove any existing cached poster (might be different extension)
     const existingPoster = this.posterGenerator?.getCachedPosterPath(project);
@@ -445,7 +461,6 @@ export class CodeShelfPanel {
 
   private async readSvg(filePath: string): Promise<string | undefined> {
     try {
-      const fs = require('fs');
       const svg: string = await fs.promises.readFile(filePath, 'utf-8');
       return transformSvg(svg);
     } catch {
@@ -504,38 +519,6 @@ export class CodeShelfPanel {
     this.postMessage({ type: 'projects:loaded', shelves, diff });
   }
 
-  private getHtml(): string {
-    const webview = this.panel.webview;
-    const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'out-webview', 'webview', 'main.js'),
-    );
-    const styleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'styles', 'main.css'),
-    );
-    const codiconUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'node_modules', '@vscode', 'codicons', 'dist', 'codicon.css'),
-    );
-    const nonce = getNonce();
-
-    return /*html*/ `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy"
-    content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' blob:; worker-src blob:; img-src ${webview.cspSource} data:; font-src ${webview.cspSource};">
-  <link rel="stylesheet" href="${codiconUri}">
-  <link rel="stylesheet" href="${styleUri}">
-  <title>CodeShelf</title>
-</head>
-<body>
-  <div id="app"></div>
-
-  <script nonce="${nonce}" src="${scriptUri}"></script>
-</body>
-</html>`;
-  }
-
   private dispose() {
     CodeShelfPanel.instance = undefined;
     this.panel.dispose();
@@ -544,13 +527,4 @@ export class CodeShelfPanel {
     }
     this.disposables = [];
   }
-}
-
-function getNonce(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let nonce = '';
-  for (let i = 0; i < 32; i++) {
-    nonce += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return nonce;
 }
