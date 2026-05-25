@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Shelf } from '../../shared/types';
-import { postMsg, collectProjects, flattenBooksets } from './helpers';
+import { postMsg, collectProjects, flattenBooksets, sortProjects } from './helpers';
+import type { SortBy } from './pure';
 import { ProjectCard } from './ProjectCard';
 
 interface Props {
@@ -8,7 +9,7 @@ interface Props {
   query: string;
   booksetThreshold: number;
   forgingPaths: Set<string>;
-  sortBy: 'date' | 'name' | 'language';
+  sortBy: SortBy;
   staleFade: boolean;
   newPaths: Set<string>;
   onProjectClick: (path: string) => void;
@@ -36,14 +37,7 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy,
   if (projects.length === 0) return null;
 
   // Sort: starred first, then by user-selected sort
-  projects = [...projects].sort((a, b) => {
-    if (a.starred !== b.starred) return a.starred ? -1 : 1;
-    switch (sortBy) {
-      case 'name': return a.name.localeCompare(b.name);
-      case 'language': return (a.primaryLanguage ?? '').localeCompare(b.primaryLanguage ?? '');
-      default: return b.lastModified - a.lastModified;
-    }
-  });
+  projects = sortProjects(projects, sortBy);
   const isCompact = projects.length <= 3;
 
   return (

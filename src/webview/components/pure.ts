@@ -60,9 +60,16 @@ export function flattenBooksets(items: ShelfItem[]): ShelfItem[] {
   return result;
 }
 
-export function sortProjects(projects: Project[]): Project[] {
+export type SortBy = 'date' | 'name' | 'language';
+
+// Starred projects always come first; ties broken by the chosen mode.
+export function sortProjects(projects: Project[], sortBy: SortBy = 'date'): Project[] {
   return [...projects].sort((a, b) => {
     if (a.starred !== b.starred) return a.starred ? -1 : 1;
-    return b.lastModified - a.lastModified;
+    switch (sortBy) {
+      case 'name': return a.name.localeCompare(b.name);
+      case 'language': return (a.primaryLanguage ?? '').localeCompare(b.primaryLanguage ?? '');
+      default: return b.lastModified - a.lastModified;
+    }
   });
 }

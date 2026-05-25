@@ -3,9 +3,17 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import type { ExtToWebview, Shelf, Project, ScanDiff } from '../shared/types';
 import { postMsg } from './components/helpers';
+import type { SortBy } from './components/pure';
 import { RootGroup } from './components/RootGroup';
 import { ShelfDetailModal } from './components/ShelfDetailModal';
 import { ProjectDetailModal } from './components/ProjectDetailModal';
+
+// ── Timing constants (ms) ──
+
+const STAGGER_STEP_MS = 80;   // delay between successive card entrances
+const STAGGER_TAIL_MS = 500;  // grace period after the last card before cleanup
+const SYNC_TOAST_MS = 3000;   // how long the sync status lingers
+const NEW_BADGE_MS = 4000;    // how long freshly-added cards stay highlighted
 
 // ── App State ──
 
@@ -26,7 +34,7 @@ function App() {
     syncText: '', syncVisible: false, forgingPaths: new Set(),
   });
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'date' | 'name' | 'language'>('date');
+  const [sortBy, setSortBy] = useState<SortBy>('date');
   const [staleFade, setStaleFade] = useState(false);
   const [projectDetail, setProjectDetail] = useState<{ project: Project; rootPath: string } | null>(null);
   const [shelfDetail, setShelfDetail] = useState<Shelf | null>(null);
@@ -91,13 +99,13 @@ function App() {
                   card.classList.remove('stagger-in');
                   (card as HTMLElement).style.removeProperty('--stagger-i');
                 });
-              }, cards.length * 80 + 500);
+              }, cards.length * STAGGER_STEP_MS + STAGGER_TAIL_MS);
             });
           }
           if (msg.diff?.addedPaths?.length) {
             setNewPaths(new Set(msg.diff.addedPaths));
             if (newPathsTimer.current) clearTimeout(newPathsTimer.current);
-            newPathsTimer.current = setTimeout(() => setNewPaths(new Set()), 4000);
+            newPathsTimer.current = setTimeout(() => setNewPaths(new Set()), NEW_BADGE_MS);
           }
           showSyncResult(msg.diff);
           break;
@@ -138,7 +146,7 @@ function App() {
     const text = !diff ? 'updated' : !diff.changed ? 'up to date'
       : `updated: ${[diff.added > 0 && `+${diff.added} new`, diff.removed > 0 && `-${diff.removed} removed`].filter(Boolean).join(', ')}`;
     setState(s => ({ ...s, syncText: text, syncVisible: true }));
-    setTimeout(() => setState(s => ({ ...s, syncVisible: false })), 3000);
+    setTimeout(() => setState(s => ({ ...s, syncVisible: false })), SYNC_TOAST_MS);
   }, []);
 
   const findProject = useCallback((path: string): { project: Project; rootPath: string } | null => {
@@ -236,8 +244,6 @@ function LoadingScreen() {
 }
 
 // ── Shelf Screen ──
-
-type SortBy = 'date' | 'name' | 'language';
 
 interface ShelfScreenProps {
   shelves: Shelf[]; searchQuery: string; onSearchChange: (q: string) => void;

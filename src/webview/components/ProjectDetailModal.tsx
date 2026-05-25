@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Project } from '../../shared/types';
+import { buildPosterPrompt, POSTER_SYSTEM_PROMPT } from '../../shared/constants';
 import { postMsg, LANGUAGE_ICONS, LANGUAGE_COLORS, hashColor, timeAgo } from './helpers';
 
 interface Props {
@@ -82,17 +83,8 @@ export function ProjectDetailModal({ project, forging, onClose }: Props) {
                 </div>
                 <details className="prompt-spoiler">
                   <summary className="prompt-spoiler-toggle"><i className="codicon codicon-eye" /> Show prompt</summary>
-                  <div className="prompt-section">
-                    {[
-                      `Generate a minimal, elegant SVG poster for a ${lang} project called "${project.name}".`,
-                      '400x240px, dark background, subtle geometric elements, project name prominent.',
-                      'Modern technical style, like a Steam game library card.',
-                      markers ? `Tech detected: ${markers}` : '',
-                    ].filter(Boolean).join('\n')}
-                  </div>
-                  <div className="prompt-section">
-                    {'Final output: ONLY raw SVG markup. 400x240px.\nRead-only tools allowed: Read, Glob, Grep.\nFinal message starts with <svg, ends with </svg>.'}
-                  </div>
+                  <div className="prompt-section">{buildPosterPrompt(project.name, lang, markers)}</div>
+                  <div className="prompt-section">{POSTER_SYSTEM_PROMPT}</div>
                 </details>
               </div>
             </div>

@@ -145,4 +145,26 @@ describe('sortProjects', () => {
     sortProjects(projects);
     expect(projects).toEqual(original);
   });
+
+  it('sorts by name when sortBy is "name"', () => {
+    const projects = [makeProject('charlie'), makeProject('alpha'), makeProject('bravo')];
+    expect(sortProjects(projects, 'name').map(p => p.name)).toEqual(['alpha', 'bravo', 'charlie']);
+  });
+
+  it('sorts by language when sortBy is "language"', () => {
+    const projects = [
+      makeProject('x', { primaryLanguage: 'ruby' }),
+      makeProject('y', { primaryLanguage: 'go' }),
+      makeProject('z', { primaryLanguage: 'python' }),
+    ];
+    expect(sortProjects(projects, 'language').map(p => p.primaryLanguage)).toEqual(['go', 'python', 'ruby']);
+  });
+
+  it('keeps starred first regardless of sort mode', () => {
+    const projects = [
+      makeProject('zeta'),
+      makeProject('alpha', { starred: true }),
+    ];
+    expect(sortProjects(projects, 'name')[0].name).toBe('alpha');
+  });
 });
