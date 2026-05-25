@@ -35,9 +35,7 @@ async function checkClaudeCli(): Promise<string | undefined> {
 
 export async function detectCapabilities(): Promise<Capabilities> {
   const available: GenerationMethod[] = [];
-  let claudeCliPath: string | undefined;
-
-  claudeCliPath = await checkClaudeCli();
+  const claudeCliPath = await checkClaudeCli();
   if (claudeCliPath) {
     available.push('claude-cli');
   }

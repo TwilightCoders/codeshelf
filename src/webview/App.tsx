@@ -39,7 +39,7 @@ function App() {
   const [projectDetail, setProjectDetail] = useState<{ project: Project; rootPath: string } | null>(null);
   const [shelfDetail, setShelfDetail] = useState<Shelf | null>(null);
   const [newPaths, setNewPaths] = useState<Set<string>>(new Set());
-  const newPathsTimer = useRef<ReturnType<typeof setTimeout>>();
+  const newPathsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const firstLoadDone = useRef(false);
 
   // Fire confetti from each new card after render
@@ -70,6 +70,13 @@ function App() {
     }, 100);
     return () => clearTimeout(timer);
   }, [newPaths]);
+
+  const showSyncResult = useCallback((diff?: ScanDiff) => {
+    const text = !diff ? 'updated' : !diff.changed ? 'up to date'
+      : `updated: ${[diff.added > 0 && `+${diff.added} new`, diff.removed > 0 && `-${diff.removed} removed`].filter(Boolean).join(', ')}`;
+    setState(s => ({ ...s, syncText: text, syncVisible: true }));
+    setTimeout(() => setState(s => ({ ...s, syncVisible: false })), SYNC_TOAST_MS);
+  }, []);
 
   // Message handler
   useEffect(() => {
@@ -138,16 +145,9 @@ function App() {
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, []);
+  }, [showSyncResult]);
 
   useEffect(() => { postMsg({ type: 'ready' }); }, []);
-
-  const showSyncResult = useCallback((diff?: ScanDiff) => {
-    const text = !diff ? 'updated' : !diff.changed ? 'up to date'
-      : `updated: ${[diff.added > 0 && `+${diff.added} new`, diff.removed > 0 && `-${diff.removed} removed`].filter(Boolean).join(', ')}`;
-    setState(s => ({ ...s, syncText: text, syncVisible: true }));
-    setTimeout(() => setState(s => ({ ...s, syncVisible: false })), SYNC_TOAST_MS);
-  }, []);
 
   const findProject = useCallback((path: string): { project: Project; rootPath: string } | null => {
     for (const shelf of state.shelves) {
