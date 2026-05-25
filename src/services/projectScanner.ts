@@ -6,7 +6,7 @@ import {
 } from '../shared/constants';
 import { Project, Shelf, ShelfItem, RootsConfig, RootConfig, ShelfMeta, ProjectMeta } from '../shared/types';
 import { getBranch } from './gitInfo';
-import { parseWorkspaceFile } from './workspaceFile';
+import { parseWorkspaceFile, WorkspaceInfo } from './workspaceFile';
 
 // ── Low-level helpers ──
 
@@ -27,17 +27,16 @@ async function isWorktree(dir: string): Promise<boolean> {
 }
 
 async function detectMarkers(dir: string): Promise<string[]> {
-  const found: string[] = [];
-  for (const marker of Object.keys(PROJECT_MARKERS)) {
+  const markerNames = Object.keys(PROJECT_MARKERS);
+  // Check all file markers concurrently; Promise.all preserves order.
+  const hits = await Promise.all(markerNames.map(async marker => {
     if (marker === '.git') {
       // Only count .git if it's a real repo, not a worktree
-      if (await exists(path.join(dir, marker)) && !await isWorktree(dir)) {
-        found.push(marker);
-      }
-      continue;
+      return (await exists(path.join(dir, marker))) && !(await isWorktree(dir)) ? marker : null;
     }
-    if (await exists(path.join(dir, marker))) found.push(marker);
-  }
+    return (await exists(path.join(dir, marker))) ? marker : null;
+  }));
+  const found = hits.filter((m): m is string => m !== null);
   try {
     const entries = await fs.promises.readdir(dir);
     for (const pattern of GLOB_MARKERS) {
@@ -73,10 +72,20 @@ function resolveShelfMeta(shelfPath: string, rootMeta?: RootConfig): ShelfMeta |
   return rootMeta.shelves[shelfPath] ?? rootMeta.shelves[path.basename(shelfPath)];
 }
 
-async function buildProject(dir: string, markers: string[], projectMeta?: ProjectMeta): Promise<Project> {
-  const stat = await fs.promises.stat(dir);
+// `wsInfo` may be supplied by the caller to avoid re-parsing the workspace
+// file (the scanner already parses it once per directory). Pass `null` to skip
+// the lookup entirely; leave `undefined` to parse on demand.
+async function buildProject(
+  dir: string,
+  markers: string[],
+  projectMeta?: ProjectMeta,
+  wsInfo?: WorkspaceInfo | null,
+): Promise<Project> {
+  const [stat, ws] = await Promise.all([
+    fs.promises.stat(dir),
+    wsInfo === undefined ? parseWorkspaceFile(dir) : Promise.resolve(wsInfo),
+  ]);
   const gitBranch = markers.includes('.git') ? await getBranch(dir) : undefined;
-  const wsInfo = await parseWorkspaceFile(dir);
 
   return {
     name: projectMeta?.name ?? path.basename(dir),
@@ -87,15 +96,18 @@ async function buildProject(dir: string, markers: string[], projectMeta?: Projec
     lastModified: stat.mtimeMs,
     poster: projectMeta?.poster,
     description: projectMeta?.description,
-    workspaceFile: wsInfo?.filePath,
+    workspaceFile: ws?.filePath,
     starred: projectMeta?.starred,
   };
 }
 
 // ── Workspace-as-bookset: multi-folder workspace becomes a bookset ──
 
-async function tryWorkspaceBookset(dir: string, shelfMeta?: ShelfMeta): Promise<ShelfItem[] | null> {
-  const wsInfo = await parseWorkspaceFile(dir);
+async function tryWorkspaceBookset(
+  dir: string,
+  wsInfo: WorkspaceInfo | undefined,
+  shelfMeta?: ShelfMeta,
+): Promise<ShelfItem[] | null> {
   if (!wsInfo || wsInfo.folders.length <= 1) return null;
 
   // If one of the folders is "." (the directory itself), this is a single
@@ -104,19 +116,19 @@ async function tryWorkspaceBookset(dir: string, shelfMeta?: ShelfMeta): Promise<
   const hasSelfRef = wsInfo.folders.some(f => path.resolve(f) === resolvedDir);
   if (hasSelfRef) return null;
 
-  // Multi-folder workspace → each folder is a sub-project
-  const items: ShelfItem[] = [];
-  for (const folderPath of wsInfo.folders) {
-    if (!await exists(folderPath)) continue;
+  // Multi-folder workspace → each folder is a sub-project. Build them
+  // concurrently; the parent workspace file opens the whole thing.
+  const built = await Promise.all(wsInfo.folders.map(async folderPath => {
+    if (!await exists(folderPath)) return null;
     const markers = await detectMarkers(folderPath);
     if (markers.length === 0) markers.push('.code-workspace'); // mark it anyway
     const pMeta = resolveProjectMeta(folderPath, shelfMeta);
-    if (pMeta?.hidden) continue;
-    const project = await buildProject(folderPath, markers, pMeta);
-    // The parent workspace file should be used to open the whole thing
+    if (pMeta?.hidden) return null;
+    const project = await buildProject(folderPath, markers, pMeta, null);
     project.workspaceFile = wsInfo.filePath;
-    items.push({ kind: 'project', project });
-  }
+    return { kind: 'project', project } as ShelfItem;
+  }));
+  const items = built.filter((i): i is ShelfItem => i !== null);
   return items.length > 0 ? items : null;
 }
 
@@ -152,25 +164,31 @@ async function scanDirectory(
     .filter(e => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.'))
     .map(e => path.join(dir, e.name));
 
-  for (const subdir of subdirs) {
-    // Check for workspace-as-bookset first
-    const wsItems = await tryWorkspaceBookset(subdir, shelfMeta);
+  // Process siblings concurrently. Promise.all preserves array order, so the
+  // merged result is deterministic and matches a sequential walk.
+  const perSubdir = await Promise.all(subdirs.map(async (subdir): Promise<ScanResult> => {
+    const local: ScanResult = { projects: [], groups: [] };
+
+    // Parse the workspace file once and reuse it for both the bookset check
+    // and (for plain projects) buildProject.
+    const wsInfo = await parseWorkspaceFile(subdir);
+    const wsItems = await tryWorkspaceBookset(subdir, wsInfo, shelfMeta);
     if (wsItems) {
       const groupName = namePrefix ? `${namePrefix}/${path.basename(subdir)}` : path.basename(subdir);
-      groups.push({ name: groupName, path: subdir, projects: wsItems.map(i => (i as { kind: 'project'; project: Project }).project) });
-      continue;
+      local.groups.push({ name: groupName, path: subdir, projects: wsItems.map(i => (i as { kind: 'project'; project: Project }).project) });
+      return local;
     }
 
     const markers = await detectMarkers(subdir);
     if (markers.length > 0) {
       const pMeta = resolveProjectMeta(subdir, shelfMeta);
       if (!pMeta?.hidden) {
-        const project = await buildProject(subdir, markers, pMeta);
+        const project = await buildProject(subdir, markers, pMeta, wsInfo);
         // Apply collapsed name prefix if we're inside a single-child chain
         if (namePrefix) {
           project.name = `${namePrefix}/${project.name}`;
         }
-        projects.push(project);
+        local.projects.push(project);
       }
     } else if (currentDepth < maxDepth) {
       // Check for single-child collapse
@@ -181,8 +199,8 @@ async function scanDirectory(
       if (childDirs.length === 1) {
         // Single-child collapse: recurse deeper with concatenated name
         const nested = await scanDirectory(subdir, maxDepth, shelfMeta, currentDepth + 1, subdirName);
-        projects.push(...nested.projects);
-        groups.push(...nested.groups);
+        local.projects.push(...nested.projects);
+        local.groups.push(...nested.groups);
       } else {
         const nested = await scanDirectory(subdir, maxDepth, shelfMeta, currentDepth + 1);
         if (nested.projects.length > 0 || nested.groups.length > 0) {
@@ -190,10 +208,16 @@ async function scanDirectory(
             ...nested.projects,
             ...nested.groups.flatMap(g => g.projects),
           ];
-          groups.push({ name: subdirName, path: subdir, projects: allProjects });
+          local.groups.push({ name: subdirName, path: subdir, projects: allProjects });
         }
       }
     }
+    return local;
+  }));
+
+  for (const r of perSubdir) {
+    projects.push(...r.projects);
+    groups.push(...r.groups);
   }
 
   return { projects, groups };
@@ -300,8 +324,12 @@ export async function scanRoots(
 
       const shelfMeta = resolveShelfMeta(topDir.path, rootConfig);
 
+      // Parse the workspace file once; reuse for the bookset check and, if this
+      // turns out to be a plain project, buildProject below.
+      const topWsInfo = await parseWorkspaceFile(topDir.path);
+
       // Check for workspace-as-bookset at the shelf level
-      const wsItems = await tryWorkspaceBookset(topDir.path, shelfMeta);
+      const wsItems = await tryWorkspaceBookset(topDir.path, topWsInfo, shelfMeta);
       if (wsItems) {
         // Multi-folder workspace — run through rollup like any other shelf
         const hasExplicitMeta = shelfMeta && Object.keys(shelfMeta).length > 0;
@@ -328,7 +356,7 @@ export async function scanRoots(
       if (topMarkers.length > 0) {
         const pMeta = resolveProjectMeta(topDir.path, shelfMeta);
         if (!pMeta?.hidden) {
-          const project = await buildProject(topDir.path, topMarkers, pMeta);
+          const project = await buildProject(topDir.path, topMarkers, pMeta, topWsInfo);
           looseProjects.push({ kind: 'project', project });
         }
         continue;

@@ -1,0 +1,114 @@
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { scanRoots } from '../src/services/projectScanner';
+import type { Shelf } from '../src/shared/types';
+
+// ── Filesystem fixture ──
+//
+// Builds a real directory tree in a tmpdir and exercises scanRoots end-to-end.
+// This covers scanDirectory/scanRoots — the recursive walk, single-child
+// collapse, rollup, worktree skipping, and workspace-as-bookset — which the
+// pure-function tests in scanner.test.ts do not reach.
+
+let root1: string;
+let root2: string;
+let tmp: string;
+
+async function mkproj(dir: string, marker: string, contents = '{}') {
+  await fs.promises.mkdir(dir, { recursive: true });
+  await fs.promises.writeFile(path.join(dir, marker), contents);
+}
+
+beforeAll(async () => {
+  tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'codeshelf-scan-'));
+  root1 = path.join(tmp, 'root1');
+  root2 = path.join(tmp, 'root2');
+
+  // root1: loose project + a real shelf + single-child collapse + a worktree
+  await mkproj(path.join(root1, 'soloProj'), 'package.json');
+
+  await mkproj(path.join(root1, 'Apps', 'a'), 'Gemfile', 'source "x"');
+  await mkproj(path.join(root1, 'Apps', 'b'), 'Cargo.toml');
+  await mkproj(path.join(root1, 'Apps', 'c'), 'go.mod');
+  await mkproj(path.join(root1, 'Apps', 'd'), 'package.json');
+  await mkproj(path.join(root1, 'Apps', 'e'), 'pyproject.toml');
+  // A git worktree (.git is a FILE, not a dir) with no other markers — skipped
+  await fs.promises.mkdir(path.join(root1, 'Apps', 'wt'), { recursive: true });
+  await fs.promises.writeFile(path.join(root1, 'Apps', 'wt', '.git'), 'gitdir: /elsewhere/.git/worktrees/wt');
+
+  // Tiny has exactly one child project → single-child collapse → absorbed loose
+  await mkproj(path.join(root1, 'Tiny', 'only'), 'package.json');
+
+  // root2: a multi-folder .code-workspace → bookset shelf "WS"
+  const ws = path.join(root2, 'WS');
+  await mkproj(path.join(ws, 'frontend'), 'package.json');
+  await mkproj(path.join(ws, 'backend'), 'go.mod');
+  await mkproj(path.join(ws, 'shared'), 'Cargo.toml');
+  await mkproj(path.join(ws, 'infra'), 'Makefile');
+  await fs.promises.writeFile(
+    path.join(ws, 'team.code-workspace'),
+    JSON.stringify({ folders: [{ path: './frontend' }, { path: './backend' }, { path: './shared' }, { path: './infra' }] }),
+  );
+});
+
+afterAll(async () => {
+  await fs.promises.rm(tmp, { recursive: true, force: true });
+});
+
+function shelf(shelves: Shelf[], name: string): Shelf | undefined {
+  return shelves.find(s => s.name === name);
+}
+
+describe('scanRoots (filesystem)', () => {
+  it('keeps a directory with >ROLLUP_THRESHOLD projects as its own shelf', async () => {
+    const shelves = await scanRoots({ [root1]: {} }, 3);
+    const apps = shelf(shelves, 'Apps');
+    expect(apps).toBeDefined();
+    const names = apps!.items.map(i => (i.kind === 'project' ? i.project.name : i.name)).sort();
+    expect(names).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
+  it('infers language from markers', async () => {
+    const shelves = await scanRoots({ [root1]: {} }, 3);
+    const apps = shelf(shelves, 'Apps')!;
+    const a = apps.items.find(i => i.kind === 'project' && i.project.name === 'a');
+    expect(a?.kind === 'project' && a.project.primaryLanguage).toBe('ruby');
+  });
+
+  it('skips git worktrees (.git as a file)', async () => {
+    const shelves = await scanRoots({ [root1]: {} }, 3);
+    const apps = shelf(shelves, 'Apps')!;
+    const names = apps.items.map(i => (i.kind === 'project' ? i.project.name : i.name));
+    expect(names).not.toContain('wt');
+  });
+
+  it('absorbs small/single-child dirs into the loose Projects shelf', async () => {
+    const shelves = await scanRoots({ [root1]: {} }, 3);
+    const loose = shelf(shelves, 'Projects');
+    expect(loose).toBeDefined();
+    const names = loose!.items.map(i => (i.kind === 'project' ? i.project.name : i.name));
+    expect(names).toContain('soloProj');
+    expect(names).toContain('Tiny/only'); // single-child collapse prefixes the name
+  });
+
+  it('treats a multi-folder .code-workspace as a bookset shelf', async () => {
+    const shelves = await scanRoots({ [root2]: {} }, 3);
+    const wsShelf = shelf(shelves, 'WS');
+    expect(wsShelf).toBeDefined();
+    const projects = wsShelf!.items.filter(i => i.kind === 'project');
+    expect(projects).toHaveLength(4);
+    // Every sub-project should open via the parent workspace file
+    for (const item of projects) {
+      if (item.kind === 'project') {
+        expect(item.project.workspaceFile).toBe(path.join(root2, 'WS', 'team.code-workspace'));
+      }
+    }
+  });
+
+  it('returns no shelves for an unreadable root', async () => {
+    const shelves = await scanRoots({ [path.join(tmp, 'does-not-exist')]: {} }, 3);
+    expect(shelves).toEqual([]);
+  });
+});
