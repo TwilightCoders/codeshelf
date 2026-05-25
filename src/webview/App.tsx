@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import confetti from 'canvas-confetti';
 import type { ExtToWebview, Shelf, Project, ScanDiff } from '../shared/types';
 import { postMsg } from './components/helpers';
 import { RootGroup } from './components/RootGroup';
@@ -29,6 +30,38 @@ function App() {
   const [staleFade, setStaleFade] = useState(false);
   const [projectDetail, setProjectDetail] = useState<{ project: Project; rootPath: string } | null>(null);
   const [shelfDetail, setShelfDetail] = useState<Shelf | null>(null);
+  const [newPaths, setNewPaths] = useState<Set<string>>(new Set());
+  const newPathsTimer = useRef<ReturnType<typeof setTimeout>>();
+  const firstLoadDone = useRef(false);
+
+  // Fire confetti from each new card after render
+  useEffect(() => {
+    if (newPaths.size === 0) return;
+    // Small delay to let React render the cards
+    const timer = setTimeout(() => {
+      const cards = document.querySelectorAll('.project-card.new-project');
+      cards.forEach((card, i) => {
+        const rect = card.getBoundingClientRect();
+        const x = (rect.left + rect.width / 2) / window.innerWidth;
+        const y = (rect.top + rect.height / 2) / window.innerHeight;
+        // Stagger bursts slightly
+        setTimeout(() => {
+          confetti({
+            particleCount: Math.min(40, Math.max(15, 60 / newPaths.size)),
+            spread: 50,
+            origin: { x, y },
+            startVelocity: 20,
+            gravity: 0.8,
+            ticks: 120,
+            colors: ['#e8b627', '#ff78c8', '#64c8ff', '#ff6b6b', '#6bff6b'],
+            scalar: 0.8,
+            disableForReducedMotion: true,
+          });
+        }, i * 150);
+      });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [newPaths]);
 
   // Message handler
   useEffect(() => {
@@ -43,6 +76,29 @@ function App() {
           break;
         case 'projects:loaded':
           setState(s => ({ ...s, screen: 'shelf', shelves: msg.shelves }));
+          if (!firstLoadDone.current) {
+            firstLoadDone.current = true;
+            // After React renders, stamp --stagger-i on each card and add class
+            requestAnimationFrame(() => {
+              const cards = document.querySelectorAll('.project-card');
+              cards.forEach((card, i) => {
+                (card as HTMLElement).style.setProperty('--stagger-i', String(i));
+                card.classList.add('stagger-in');
+              });
+              // Remove stagger class after all animations finish
+              setTimeout(() => {
+                cards.forEach(card => {
+                  card.classList.remove('stagger-in');
+                  (card as HTMLElement).style.removeProperty('--stagger-i');
+                });
+              }, cards.length * 80 + 500);
+            });
+          }
+          if (msg.diff?.addedPaths?.length) {
+            setNewPaths(new Set(msg.diff.addedPaths));
+            if (newPathsTimer.current) clearTimeout(newPathsTimer.current);
+            newPathsTimer.current = setTimeout(() => setNewPaths(new Set()), 4000);
+          }
           showSyncResult(msg.diff);
           break;
         case 'poster:generating':
@@ -136,6 +192,7 @@ function App() {
         syncText={state.syncText} syncVisible={state.syncVisible}
         booksetThreshold={state.booksetThreshold} forgingPaths={state.forgingPaths}
         sortBy={sortBy} onSortChange={setSortBy} staleFade={staleFade} onStaleFadeToggle={() => setStaleFade(!staleFade)}
+        newPaths={newPaths}
         onProjectClick={openProjectDetail} onShelfClick={openShelfDetail}
       />
       {shelfDetail && (() => {
@@ -186,10 +243,11 @@ interface ShelfScreenProps {
   shelves: Shelf[]; searchQuery: string; onSearchChange: (q: string) => void;
   syncText: string; syncVisible: boolean; booksetThreshold: number; forgingPaths: Set<string>;
   sortBy: SortBy; onSortChange: (s: SortBy) => void; staleFade: boolean; onStaleFadeToggle: () => void;
+  newPaths: Set<string>;
   onProjectClick: (path: string) => void; onShelfClick: (shelf: Shelf) => void;
 }
 
-function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisible, booksetThreshold, forgingPaths, sortBy, onSortChange, staleFade, onStaleFadeToggle, onProjectClick, onShelfClick }: ShelfScreenProps) {
+function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisible, booksetThreshold, forgingPaths, sortBy, onSortChange, staleFade, onStaleFadeToggle, newPaths, onProjectClick, onShelfClick }: ShelfScreenProps) {
   const q = searchQuery.toLowerCase().trim();
 
   const grouped = new Map<string, Shelf[]>();
@@ -240,7 +298,7 @@ function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisib
           return (
             <RootGroup key={rootLabel} label={rootLabel} shelves={rootShelves} hiddenShelves={hidden}
               query={q} booksetThreshold={booksetThreshold} forgingPaths={forgingPaths}
-              sortBy={sortBy} staleFade={staleFade}
+              sortBy={sortBy} staleFade={staleFade} newPaths={newPaths}
               onProjectClick={onProjectClick} onShelfClick={onShelfClick} />
           );
         })}

@@ -48,7 +48,7 @@ async function detectMarkers(dir: string): Promise<string[]> {
   return found;
 }
 
-function inferLanguage(markers: string[]): string | undefined {
+export function inferLanguage(markers: string[]): string | undefined {
   const languages = new Set<string>();
   for (const marker of markers) {
     const lang = PROJECT_MARKERS[marker];
@@ -204,9 +204,9 @@ async function scanDirectory(
 // prefix each project name with the group name and push up to the parent.
 // Works bottom-up recursively through the tree.
 
-const ROLLUP_THRESHOLD = 3;
+export const ROLLUP_THRESHOLD = 3;
 
-function rollupItems(items: ShelfItem[]): ShelfItem[] {
+export function rollupItems(items: ShelfItem[]): ShelfItem[] {
   const result: ShelfItem[] = [];
 
   for (const item of items) {
@@ -235,7 +235,7 @@ function rollupItems(items: ShelfItem[]): ShelfItem[] {
 // After rolling up booksets, check if the entire shelf is small enough
 // to be absorbed into the loose projects row.
 // Returns null if should be absorbed, or the items if it should stay as a shelf.
-function rollupShelf(
+export function rollupShelf(
   items: ShelfItem[],
   shelfName: string,
   hasExplicitMeta: boolean,

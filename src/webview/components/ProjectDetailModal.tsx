@@ -102,9 +102,16 @@ export function ProjectDetailModal({ project, forging, onClose }: Props) {
         <div className="detail-info">
           <div className="detail-title-row">
             <h2 className="detail-name">{project.name}</h2>
-            <button className="detail-open-btn" title="Open Project" onClick={() => postMsg({ type: 'project:open', path: project.path, workspaceFile: project.workspaceFile })}>
-              <i className="codicon codicon-folder" /><i className="codicon codicon-folder-opened" />
-            </button>
+            <div className={`detail-open-group ${project.workspaceFile ? 'has-workspace' : ''}`}>
+              <button className="detail-open-btn" title="Open folder" onClick={() => postMsg({ type: 'project:open', path: project.path })}>
+                <i className="codicon codicon-folder" /><i className="codicon codicon-folder-opened" />
+              </button>
+              {project.workspaceFile && (
+                <button className="detail-open-btn detail-open-workspace" title="Open workspace" onClick={() => postMsg({ type: 'project:open', path: project.path, workspaceFile: project.workspaceFile })}>
+                  <i className="codicon codicon-multiple-windows" />
+                </button>
+              )}
+            </div>
           </div>
           <p className="detail-path">{project.path}</p>
           <div className="detail-meta">

@@ -4,7 +4,7 @@ import { scanRoots } from '../services/projectScanner';
 import { detectCapabilities } from '../services/capabilities';
 import { PosterGenerator } from '../services/posterGenerator';
 
-function collectProjectPaths(shelves: Shelf[]): Set<string> {
+export function collectProjectPaths(shelves: Shelf[]): Set<string> {
   const paths = new Set<string>();
   for (const shelf of shelves) {
     for (const item of shelf.items) {
@@ -20,18 +20,112 @@ function collectProjectPaths(shelves: Shelf[]): Set<string> {
   return paths;
 }
 
-function computeDiff(oldShelves: Shelf[], newShelves: Shelf[]): ScanDiff {
+export function computeDiff(oldShelves: Shelf[], newShelves: Shelf[]): ScanDiff {
   const oldPaths = collectProjectPaths(oldShelves);
   const newPaths = collectProjectPaths(newShelves);
-  let added = 0;
+  const addedPaths: string[] = [];
   let removed = 0;
   for (const p of newPaths) {
-    if (!oldPaths.has(p)) added++;
+    if (!oldPaths.has(p)) addedPaths.push(p);
   }
   for (const p of oldPaths) {
     if (!newPaths.has(p)) removed++;
   }
-  return { added, removed, changed: added > 0 || removed > 0 };
+  const added = addedPaths.length;
+  return { added, removed, changed: added > 0 || removed > 0, addedPaths };
+}
+
+/**
+ * Transform raw SVG markup for proper embedding:
+ * - Add viewBox from width/height if missing
+ * - Strip hardcoded width/height
+ * - Add preserveAspectRatio for cover-style scaling
+ */
+export function transformSvg(svg: string): string | undefined {
+  if (!svg.includes('<svg')) return undefined;
+  return svg.replace(/<svg([^>]*)>/, (_match: string, attrs: string) => {
+    let newAttrs = attrs;
+    const wMatch = attrs.match(/width="(\d+)"/);
+    const hMatch = attrs.match(/height="(\d+)"/);
+    if (!attrs.includes('viewBox') && wMatch && hMatch) {
+      newAttrs += ` viewBox="0 0 ${wMatch[1]} ${hMatch[1]}"`;
+    }
+    newAttrs = newAttrs.replace(/\s*width="[^"]*"/g, '');
+    newAttrs = newAttrs.replace(/\s*height="[^"]*"/g, '');
+    if (!newAttrs.includes('preserveAspectRatio')) {
+      newAttrs += ' preserveAspectRatio="xMidYMid slice"';
+    }
+    return `<svg${newAttrs}>`;
+  });
+}
+
+/**
+ * Apply metadata updates to a roots config, determining whether the target
+ * is a shelf (direct child of root) or project (deeper) by relative path depth.
+ * Returns the mutated rootsConfig.
+ */
+export function applyItemMeta(
+  rootsConfig: RootsConfig,
+  rootPath: string,
+  itemPath: string,
+  updates: Record<string, unknown>,
+  homePath?: string,
+): RootsConfig {
+  const pathModule = require('path');
+  const rootKey = Object.keys(rootsConfig).find(k =>
+    k === rootPath || k.replace(/^~/, homePath ?? '') === rootPath
+  );
+  if (!rootKey) return rootsConfig;
+  const expandedRoot = rootKey.replace(/^~/, homePath ?? '');
+
+  const root = rootsConfig[rootKey];
+  if (!root.shelves) root.shelves = {};
+
+  const relativePath = pathModule.relative(expandedRoot, itemPath);
+  const parts: string[] = relativePath.split(pathModule.sep);
+
+  const applyUpdates = (obj: Record<string, unknown>) => {
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === false || value === undefined || value === null || value === '') {
+        delete obj[key];
+      } else {
+        obj[key] = value;
+      }
+    }
+  };
+
+  if (parts.length === 1) {
+    const shelfKey = root.shelves[itemPath] ? itemPath
+      : root.shelves[parts[0]] ? parts[0]
+      : parts[0];
+    if (!root.shelves[shelfKey]) root.shelves[shelfKey] = {};
+    applyUpdates(root.shelves[shelfKey] as Record<string, unknown>);
+  } else {
+    const shelfName = parts[0];
+    const projectName = pathModule.basename(itemPath);
+    const shelfKey = root.shelves[shelfName] ? shelfName : shelfName;
+    if (!root.shelves[shelfKey]) root.shelves[shelfKey] = {};
+    const shelf = root.shelves[shelfKey];
+    if (!shelf.projects) shelf.projects = {};
+    const projKey = shelf.projects[projectName] ? projectName : projectName;
+    if (!shelf.projects[projKey]) shelf.projects[projKey] = {};
+    applyUpdates(shelf.projects[projKey] as Record<string, unknown>);
+    if (Object.keys(shelf.projects[projKey]).length === 0) {
+      delete shelf.projects[projKey];
+    }
+    if (shelf.projects && Object.keys(shelf.projects).length === 0) {
+      delete shelf.projects;
+    }
+    if (Object.keys(shelf).length === 0) {
+      delete root.shelves[shelfKey];
+    }
+  }
+
+  if (root.shelves && Object.keys(root.shelves).length === 0) {
+    delete root.shelves;
+  }
+
+  return rootsConfig;
 }
 
 function getConfig() {
@@ -198,67 +292,9 @@ export class CodeShelfPanel {
   }
 
   private async updateItemMeta(rootPath: string, itemPath: string, updates: Record<string, unknown>) {
-    const pathModule = require('path');
     const config = vscode.workspace.getConfiguration('codeshelf');
     const roots = config.get<RootsConfig>('roots', {});
-    const rootKey = Object.keys(roots).find(k =>
-      k === rootPath || k.replace(/^~/, process.env.HOME ?? '') === rootPath
-    );
-    if (!rootKey) return;
-    const expandedRoot = rootKey.replace(/^~/, process.env.HOME ?? '');
-
-    const root = roots[rootKey];
-    if (!root.shelves) root.shelves = {};
-
-    // Determine if itemPath is a shelf (direct child of root) or a project (deeper)
-    const relativePath = pathModule.relative(expandedRoot, itemPath);
-    const parts: string[] = relativePath.split(pathModule.sep);
-
-    const applyUpdates = (obj: Record<string, unknown>) => {
-      for (const [key, value] of Object.entries(updates)) {
-        if (value === false || value === undefined || value === null || value === '') {
-          delete obj[key];
-        } else {
-          obj[key] = value;
-        }
-      }
-    };
-
-    if (parts.length === 1) {
-      // Direct child of root → it's a shelf
-      const shelfKey = root.shelves[itemPath] ? itemPath
-        : root.shelves[parts[0]] ? parts[0]
-        : parts[0];
-      if (!root.shelves[shelfKey]) root.shelves[shelfKey] = {};
-      applyUpdates(root.shelves[shelfKey] as Record<string, unknown>);
-      // Keep empty shelf entries — they signal "user configured this shelf"
-      // which prevents absorption into the loose Projects row
-    } else {
-      // Deeper → it's a project inside a shelf
-      const shelfName = parts[0];
-      const projectName = pathModule.basename(itemPath);
-      const shelfKey = root.shelves[shelfName] ? shelfName : shelfName;
-      if (!root.shelves[shelfKey]) root.shelves[shelfKey] = {};
-      const shelf = root.shelves[shelfKey];
-      if (!shelf.projects) shelf.projects = {};
-      const projKey = shelf.projects[projectName] ? projectName : projectName;
-      if (!shelf.projects[projKey]) shelf.projects[projKey] = {};
-      applyUpdates(shelf.projects[projKey] as Record<string, unknown>);
-      if (Object.keys(shelf.projects[projKey]).length === 0) {
-        delete shelf.projects[projKey];
-      }
-      if (shelf.projects && Object.keys(shelf.projects).length === 0) {
-        delete shelf.projects;
-      }
-      if (Object.keys(shelf).length === 0) {
-        delete root.shelves[shelfKey];
-      }
-    }
-
-    if (Object.keys(root.shelves).length === 0) {
-      delete root.shelves;
-    }
-
+    applyItemMeta(roots, rootPath, itemPath, updates, process.env.HOME);
     await config.update('roots', roots, vscode.ConfigurationTarget.Global);
   }
 
@@ -417,30 +453,8 @@ export class CodeShelfPanel {
   private async readSvg(filePath: string): Promise<string | undefined> {
     try {
       const fs = require('fs');
-      let svg: string = await fs.promises.readFile(filePath, 'utf-8');
-      if (!svg.includes('<svg')) return undefined;
-      // Make SVG scale properly when embedded:
-      // - Ensure viewBox exists (needed for scaling)
-      // - Remove hardcoded width/height so CSS controls sizing
-      // - Add preserveAspectRatio for cover-style scaling
-      svg = svg.replace(/<svg([^>]*)>/, (_match: string, attrs: string) => {
-        let newAttrs = attrs;
-        // Extract width/height to build viewBox if missing
-        const wMatch = attrs.match(/width="(\d+)"/);
-        const hMatch = attrs.match(/height="(\d+)"/);
-        if (!attrs.includes('viewBox') && wMatch && hMatch) {
-          newAttrs += ` viewBox="0 0 ${wMatch[1]} ${hMatch[1]}"`;
-        }
-        // Remove hardcoded width/height
-        newAttrs = newAttrs.replace(/\s*width="[^"]*"/g, '');
-        newAttrs = newAttrs.replace(/\s*height="[^"]*"/g, '');
-        // Add preserveAspectRatio
-        if (!newAttrs.includes('preserveAspectRatio')) {
-          newAttrs += ' preserveAspectRatio="xMidYMid slice"';
-        }
-        return `<svg${newAttrs}>`;
-      });
-      return svg;
+      const svg: string = await fs.promises.readFile(filePath, 'utf-8');
+      return transformSvg(svg);
     } catch {
       return undefined;
     }
@@ -516,7 +530,7 @@ export class CodeShelfPanel {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource};">
+    content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' blob:; worker-src blob:; img-src ${webview.cspSource} data:; font-src ${webview.cspSource};">
   <link rel="stylesheet" href="${codiconUri}">
   <link rel="stylesheet" href="${styleUri}">
   <title>CodeShelf</title>

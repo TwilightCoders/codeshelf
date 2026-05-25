@@ -10,11 +10,12 @@ interface Props {
   forgingPaths: Set<string>;
   sortBy: 'date' | 'name' | 'language';
   staleFade: boolean;
+  newPaths: Set<string>;
   onProjectClick: (path: string) => void;
   onShelfClick: (shelf: Shelf) => void;
 }
 
-export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy, staleFade, onProjectClick, onShelfClick }: Props) {
+export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy, staleFade, newPaths, onProjectClick, onShelfClick }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [inlineFilter, setInlineFilter] = useState('');
 
@@ -67,7 +68,7 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy,
       {!collapsed && (
         <div className="shelf-row-content">
           {projects.map(p => (
-            <ProjectCard key={p.path} project={p} rootPath={shelf.rootPath} forging={forgingPaths.has(p.path)} staleFade={staleFade} onClick={() => onProjectClick(p.path)} />
+            <ProjectCard key={p.path} project={p} rootPath={shelf.rootPath} forging={forgingPaths.has(p.path)} staleFade={staleFade} isNew={newPaths.has(p.path)} onClick={() => onProjectClick(p.path)} />
           ))}
         </div>
       )}

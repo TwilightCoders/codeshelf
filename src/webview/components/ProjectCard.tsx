@@ -6,6 +6,7 @@ interface Props {
   rootPath: string;
   forging: boolean;
   staleFade?: boolean;
+  isNew?: boolean;
   onClick: () => void;
 }
 
@@ -18,7 +19,7 @@ function stalenessOpacity(lastModified: number): number {
   return 0.45;
 }
 
-export function ProjectCard({ project, rootPath, forging, staleFade, onClick }: Props) {
+export function ProjectCard({ project, rootPath, forging, staleFade, isNew, onClick }: Props) {
   const lang = project.primaryLanguage;
   const bgColor = lang ? LANGUAGE_COLORS[lang] ?? hashColor(project.name) : hashColor(project.name);
   const badge = lang ? LANGUAGE_ICONS[lang] ?? lang.slice(0, 2).toUpperCase() : '';
@@ -26,7 +27,7 @@ export function ProjectCard({ project, rootPath, forging, staleFade, onClick }: 
   const opacity = staleFade ? stalenessOpacity(project.lastModified) : 1;
 
   return (
-    <div className={`project-card ${hasPoster ? 'has-poster' : ''} ${forging ? 'forging' : ''}`}
+    <div className={`project-card ${hasPoster ? 'has-poster' : ''} ${forging ? 'forging' : ''} ${isNew ? 'new-project' : ''}`}
       title={project.path} onClick={onClick} style={{ opacity, transition: 'opacity 0.3s ease' }}>
       <div className={`card-poster-flip ${hasPoster ? 'flipped' : ''}`}>
         <div className="card-poster-face card-poster-fallback" style={{ backgroundColor: bgColor }}>
@@ -42,9 +43,16 @@ export function ProjectCard({ project, rootPath, forging, staleFade, onClick }: 
           <i className="codicon codicon-eye-closed" />
         </button>
       </div>
-      <button className="card-open-btn action-btn" title="Open project" onClick={e => { e.stopPropagation(); postMsg({ type: 'project:open', path: project.path, workspaceFile: project.workspaceFile }); }}>
-        <i className="codicon codicon-folder" /><i className="codicon codicon-folder-opened" />
-      </button>
+      <div className={`card-open-group ${project.workspaceFile ? 'has-workspace' : ''}`}>
+        <button className="card-open-btn action-btn" title="Open folder" onClick={e => { e.stopPropagation(); postMsg({ type: 'project:open', path: project.path }); }}>
+          <i className="codicon codicon-folder" /><i className="codicon codicon-folder-opened" />
+        </button>
+        {project.workspaceFile && (
+          <button className="card-open-btn card-open-workspace action-btn" title="Open workspace" onClick={e => { e.stopPropagation(); postMsg({ type: 'project:open', path: project.path, workspaceFile: project.workspaceFile }); }}>
+            <i className="codicon codicon-multiple-windows" />
+          </button>
+        )}
+      </div>
       <div className="card-info">
         <span className="card-name">{project.name}</span>
         {project.description && <p className="card-description">{project.description}</p>}

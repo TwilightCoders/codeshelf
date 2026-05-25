@@ -71,6 +71,7 @@ export interface ScanDiff {
   added: number;
   removed: number;
   changed: boolean;
+  addedPaths: string[];
 }
 
 // Webview -> Extension

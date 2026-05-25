@@ -3,3 +3,6 @@ out-webview/
 node_modules/
 *.vsix
 .vscode-test/
+test/browser/screenshots/
+.Codex/
+startpage.code-workspace
