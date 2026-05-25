@@ -233,13 +233,6 @@ export class CodeShelfPanel {
         await this.addRoot(msg.path);
         break;
       }
-      case 'item:editMeta': {
-        await vscode.commands.executeCommand(
-          'workbench.action.openSettings',
-          'codeshelf.roots',
-        );
-        break;
-      }
       case 'item:hide': {
         await this.updateItemMeta(msg.rootPath, msg.path, { hidden: msg.hidden });
         await this.scan();

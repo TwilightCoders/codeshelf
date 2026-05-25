@@ -1,3 +1,9 @@
+// VS Code globalState keys — shared so extension.ts and the panel stay in sync.
+export const STORAGE_KEYS = {
+  cachedShelves: 'codeshelf.cachedShelves',
+  posterPrompts: 'codeshelf.posterPrompts',
+} as const;
+
 export const PROJECT_MARKERS: Record<string, string> = {
   '.git': 'git',
   'package.json': 'javascript',

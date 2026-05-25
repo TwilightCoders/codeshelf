@@ -80,13 +80,11 @@ export type WebviewToExt =
   | { type: 'project:open'; path: string; workspaceFile?: string }
   | { type: 'settings:addRoot'; path: string }
   | { type: 'settings:pickRoot' }
-  | { type: 'item:editMeta'; path: string }
   | { type: 'item:hide'; path: string; rootPath: string; hidden: boolean }
   | { type: 'item:star'; path: string; rootPath: string; starred: boolean }
   | { type: 'poster:generate'; projectPath: string; userNotes?: string }
   | { type: 'poster:cancel'; projectPath: string }
   | { type: 'poster:attach'; projectPath: string }
   | { type: 'folder:reveal'; path: string }
-  | { type: 'project:showDetail'; path: string }
   | { type: 'settings:openJson' }
   | { type: 'ready' };
