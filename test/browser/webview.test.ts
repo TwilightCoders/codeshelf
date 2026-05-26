@@ -25,9 +25,23 @@ describe('initial render', () => {
     expect(cards.length).toBeGreaterThan(0);
   });
 
-  it('renders correct number of cards (10 visible from mock data)', async () => {
+  it('renders one card per visible (non-hidden) project in the mock data', async () => {
+    const expected = await page.evaluate(() => {
+      const shelves = (window as unknown as {
+        __mockHost: { getShelves: () => Array<{ hidden?: boolean; items: Array<{ kind: string; projects?: unknown[] }> }> };
+      }).__mockHost.getShelves();
+      let n = 0;
+      for (const shelf of shelves) {
+        if (shelf.hidden) continue;
+        for (const item of shelf.items) {
+          n += item.kind === 'project' ? 1 : (item.projects?.length ?? 0);
+        }
+      }
+      return n;
+    });
+    expect(expected).toBeGreaterThan(0);
     const cards = await page.$$('.project-card');
-    expect(cards.length).toBe(10);
+    expect(cards.length).toBe(expected);
   });
 
   it('renders shelf titles', async () => {
