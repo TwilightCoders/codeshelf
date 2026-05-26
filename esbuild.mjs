@@ -3,9 +3,12 @@ import * as esbuild from 'esbuild';
 const watch = process.argv.includes('--watch');
 
 const ctx = await esbuild.context({
-  entryPoints: ['src/webview/App.tsx'],
+  entryPoints: {
+    'webview/main': 'src/webview/App.tsx',
+    'dev/mockHost': 'src/webview/dev/mockHost.ts',
+  },
   bundle: true,
-  outfile: 'out-webview/webview/main.js',
+  outdir: 'out-webview',
   format: 'iife',
   platform: 'browser',
   target: 'es2020',

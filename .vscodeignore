@@ -6,6 +6,7 @@ tsconfig*.json
 .Codex/**
 .claude/**
 test/**
+out-webview/dev/**
 dev.html
 eslint.config.mjs
 .prettierrc.json
