@@ -12,6 +12,17 @@ export interface PosterResult {
   posterUri: string;
 }
 
+/**
+ * Extract a clean `<svg>…</svg>` document from CLI stdout, tolerating leading
+ * chatter or trailing prose around it. Returns undefined when no SVG is found.
+ */
+export function extractSvg(stdout: string): string | undefined {
+  const trimmed = stdout.trim();
+  if (trimmed.startsWith('<svg') && trimmed.endsWith('</svg>')) return trimmed;
+  const match = trimmed.match(/<svg[\s\S]*<\/svg>/);
+  return match ? match[0] : undefined;
+}
+
 type PosterCallback = (result: PosterResult) => void;
 
 export class PosterGenerator {
@@ -117,13 +128,10 @@ export class PosterGenerator {
         );
       });
 
-      const svg = stdout.trim();
-      if (svg.startsWith('<svg') && svg.endsWith('</svg>')) {
-        return svg;
-      }
-      const match = svg.match(/<svg[\s\S]*<\/svg>/);
-      if (match) return match[0];
-      throw new Error(`Claude returned non-SVG output (${svg.length} chars, starts with: ${svg.slice(0, 80)}...)`);
+      const svg = extractSvg(stdout);
+      if (svg) return svg;
+      const out = stdout.trim();
+      throw new Error(`Claude returned non-SVG output (${out.length} chars, starts with: ${out.slice(0, 80)}...)`);
     } catch (err: unknown) {
       if (err instanceof Error && err.message.startsWith('Claude returned')) throw err;
       const msg = err instanceof Error ? err.message : String(err);
