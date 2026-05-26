@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { computeDiff, collectProjectPaths, transformSvg, sanitizeSvg, applyItemMeta } from '../src/providers/codeshelfPanel';
+import { computeDiff, collectProjectPaths, transformSvg, sanitizeSvg } from '../src/providers/codeshelfPanel';
+import { applyItemMeta } from '../src/providers/config';
 import type { Shelf, RootsConfig } from '../src/shared/types';
 
 // ── Helpers ──

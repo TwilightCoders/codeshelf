@@ -1,12 +1,13 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ExtToWebview, WebviewToExt, Shelf, ScanDiff, RootsConfig, Project } from '../shared/types';
+import { ExtToWebview, WebviewToExt, Shelf, ScanDiff, Project } from '../shared/types';
 import { STORAGE_KEYS } from '../shared/constants';
 import { scanRoots } from '../services/projectScanner';
 import { detectCapabilities } from '../services/capabilities';
 import { PosterGenerator } from '../services/posterGenerator';
 import { renderWebviewHtml } from './htmlTemplate';
+import { getConfig, addRoot, updateItemMeta } from './config';
 
 export function collectProjectPaths(shelves: Shelf[]): Set<string> {
   const paths = new Set<string>();
@@ -79,80 +80,6 @@ export function transformSvg(svg: string): string | undefined {
     }
     return `<svg${newAttrs}>`;
   });
-}
-
-/**
- * Apply metadata updates to a roots config, determining whether the target
- * is a shelf (direct child of root) or project (deeper) by relative path depth.
- * Returns the mutated rootsConfig.
- */
-export function applyItemMeta(
-  rootsConfig: RootsConfig,
-  rootPath: string,
-  itemPath: string,
-  updates: Record<string, unknown>,
-  homePath?: string,
-): RootsConfig {
-  const rootKey = Object.keys(rootsConfig).find(k =>
-    k === rootPath || k.replace(/^~/, homePath ?? '') === rootPath
-  );
-  if (!rootKey) return rootsConfig;
-  const expandedRoot = rootKey.replace(/^~/, homePath ?? '');
-
-  const root = rootsConfig[rootKey];
-  if (!root.shelves) root.shelves = {};
-
-  const relativePath = path.relative(expandedRoot, itemPath);
-  const parts: string[] = relativePath.split(path.sep);
-
-  const applyUpdates = (obj: Record<string, unknown>) => {
-    for (const [key, value] of Object.entries(updates)) {
-      if (value === false || value === undefined || value === null || value === '') {
-        delete obj[key];
-      } else {
-        obj[key] = value;
-      }
-    }
-  };
-
-  if (parts.length === 1) {
-    // Prefer an existing full-path key, otherwise key by the shelf's basename.
-    const shelfKey = root.shelves[itemPath] ? itemPath : parts[0];
-    if (!root.shelves[shelfKey]) root.shelves[shelfKey] = {};
-    applyUpdates(root.shelves[shelfKey] as Record<string, unknown>);
-  } else {
-    const shelfKey = parts[0];
-    const projKey = path.basename(itemPath);
-    if (!root.shelves[shelfKey]) root.shelves[shelfKey] = {};
-    const shelf = root.shelves[shelfKey];
-    if (!shelf.projects) shelf.projects = {};
-    if (!shelf.projects[projKey]) shelf.projects[projKey] = {};
-    applyUpdates(shelf.projects[projKey] as Record<string, unknown>);
-    if (Object.keys(shelf.projects[projKey]).length === 0) {
-      delete shelf.projects[projKey];
-    }
-    if (shelf.projects && Object.keys(shelf.projects).length === 0) {
-      delete shelf.projects;
-    }
-    if (Object.keys(shelf).length === 0) {
-      delete root.shelves[shelfKey];
-    }
-  }
-
-  if (root.shelves && Object.keys(root.shelves).length === 0) {
-    delete root.shelves;
-  }
-
-  return rootsConfig;
-}
-
-function getConfig() {
-  const config = vscode.workspace.getConfiguration('codeshelf');
-  return {
-    roots: config.get<RootsConfig>('roots', {}),
-    scanDepth: config.get<number>('scanDepth', 3),
-    openInNewWindow: config.get<boolean>('openInNewWindow', false),
-  };
 }
 
 export class CodeShelfPanel {
@@ -243,21 +170,23 @@ export class CodeShelfPanel {
           title: 'Choose the root directory where your projects live',
         });
         if (picked && picked.length > 0) {
-          await this.addRoot(picked[0].fsPath);
+          await addRoot(picked[0].fsPath);
+          await this.scan();
         }
         break;
       }
       case 'settings:addRoot': {
-        await this.addRoot(msg.path);
+        await addRoot(msg.path);
+        await this.scan();
         break;
       }
       case 'item:hide': {
-        await this.updateItemMeta(msg.rootPath, msg.path, { hidden: msg.hidden });
+        await updateItemMeta(msg.rootPath, msg.path, { hidden: msg.hidden });
         await this.scan();
         break;
       }
       case 'item:star': {
-        await this.updateItemMeta(msg.rootPath, msg.path, { starred: msg.starred });
+        await updateItemMeta(msg.rootPath, msg.path, { starred: msg.starred });
         await this.scan();
         break;
       }
@@ -292,23 +221,6 @@ export class CodeShelfPanel {
     }
   }
 
-  private async addRoot(rootPath: string) {
-    const config = vscode.workspace.getConfiguration('codeshelf');
-    const roots = config.get<RootsConfig>('roots', {});
-    if (!roots[rootPath]) {
-      roots[rootPath] = {};
-      await config.update('roots', roots, vscode.ConfigurationTarget.Global);
-    }
-    await this.scan();
-  }
-
-  private async updateItemMeta(rootPath: string, itemPath: string, updates: Record<string, unknown>) {
-    const config = vscode.workspace.getConfiguration('codeshelf');
-    const roots = config.get<RootsConfig>('roots', {});
-    applyItemMeta(roots, rootPath, itemPath, updates, process.env.HOME);
-    await config.update('roots', roots, vscode.ConfigurationTarget.Global);
-  }
-
   private stripPosters(shelves: Shelf[]) {
     for (const shelf of shelves) {
       for (const item of shelf.items) {
@@ -324,12 +236,12 @@ export class CodeShelfPanel {
   }
 
   private async onReady() {
-    const { roots } = getConfig();
+    const { roots, booksetThreshold } = getConfig();
     const hasRoots = Object.keys(roots).length > 0;
     this.postMessage({
       type: 'settings:state',
       hasRoots,
-      booksetThreshold: vscode.workspace.getConfiguration('codeshelf').get<number>('booksetThreshold', 8),
+      booksetThreshold,
     });
 
     if (hasRoots) {
