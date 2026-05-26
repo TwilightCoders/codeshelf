@@ -5,30 +5,17 @@
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 import { execSync } from 'child_process';
 import { resolve } from 'path';
+import { chromeExecutablePath, CHROME_LAUNCH_OPTIONS } from '../../scripts/chrome.mjs';
 
 const PROJECT_ROOT = resolve(import.meta.dirname, '../..');
-
-function findChrome(): string {
-  const paths = [
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-  ];
-  for (const p of paths) {
-    try { execSync(`test -f "${p}"`); return p; } catch { /* skip */ }
-  }
-  throw new Error('No Chrome/Chromium found. Install Chrome or set CHROME_PATH.');
-}
 
 let browser: Browser | null = null;
 
 export async function launchBrowser(): Promise<Browser> {
   if (browser) return browser;
   browser = await puppeteer.launch({
-    executablePath: process.env.CHROME_PATH ?? findChrome(),
-    headless: true,
-    args: ['--no-sandbox', '--window-size=1920,1080'],
-    defaultViewport: { width: 1920, height: 1080 },
+    executablePath: chromeExecutablePath(),
+    ...CHROME_LAUNCH_OPTIONS,
   });
   return browser;
 }

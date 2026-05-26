@@ -6,31 +6,15 @@
  * Usage: node scripts/screenshot.mjs [output.png]
  */
 import puppeteer from 'puppeteer-core';
-import { execSync } from 'child_process';
 import { resolve } from 'path';
+import { chromeExecutablePath, CHROME_LAUNCH_OPTIONS } from './chrome.mjs';
 
-// Find Chrome on macOS
-function findChrome() {
-  const paths = [
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/Applications/Chromium.app/Contents/MacOS/Chromium',
-    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-  ];
-  for (const p of paths) {
-    try { execSync(`test -f "${p}"`); return p; } catch { /* skip */ }
-  }
-  throw new Error('No Chrome/Chromium found. Install Chrome or set CHROME_PATH.');
-}
-
-const chromePath = process.env.CHROME_PATH ?? findChrome();
 const outputPath = process.argv[2] ?? 'screenshot.png';
 const devHtml = resolve(import.meta.dirname, '..', 'dev.html');
 
 const browser = await puppeteer.launch({
-  executablePath: chromePath,
-  headless: true,
-  args: ['--no-sandbox', '--window-size=1920,1080'],
-  defaultViewport: { width: 1920, height: 1080 },
+  executablePath: chromeExecutablePath(),
+  ...CHROME_LAUNCH_OPTIONS,
 });
 
 const page = await browser.newPage();
