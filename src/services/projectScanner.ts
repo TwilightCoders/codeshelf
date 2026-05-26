@@ -8,10 +8,31 @@ import { Project, Shelf, ShelfItem, RootsConfig, RootConfig, ShelfMeta, ProjectM
 import { getBranch } from './gitInfo';
 import { parseWorkspaceFile, WorkspaceInfo } from './workspaceFile';
 
+// Cap on how many sibling directories are probed at once. Keeps a very wide
+// root from spawning hundreds of concurrent fs operations / open descriptors.
+const SCAN_CONCURRENCY = 16;
+
 // ── Low-level helpers ──
 
 async function exists(p: string): Promise<boolean> {
   try { await fs.promises.access(p); return true; } catch { return false; }
+}
+
+/**
+ * Like `Promise.all(items.map(fn))` but with at most `limit` calls in flight.
+ * Results are returned in input order.
+ */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < items.length) {
+      const i = cursor++;
+      results[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
 }
 
 async function isWorktree(dir: string): Promise<boolean> {
@@ -164,9 +185,9 @@ async function scanDirectory(
     .filter(e => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.'))
     .map(e => path.join(dir, e.name));
 
-  // Process siblings concurrently. Promise.all preserves array order, so the
-  // merged result is deterministic and matches a sequential walk.
-  const perSubdir = await Promise.all(subdirs.map(async (subdir): Promise<ScanResult> => {
+  // Process siblings concurrently (bounded). mapLimit preserves input order, so
+  // the merged result is deterministic and matches a sequential walk.
+  const perSubdir = await mapLimit(subdirs, SCAN_CONCURRENCY, async (subdir): Promise<ScanResult> => {
     const local: ScanResult = { projects: [], groups: [] };
 
     // Parse the workspace file once and reuse it for both the bookset check
@@ -213,7 +234,7 @@ async function scanDirectory(
       }
     }
     return local;
-  }));
+  });
 
   for (const r of perSubdir) {
     projects.push(...r.projects);
