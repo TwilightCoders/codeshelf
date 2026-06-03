@@ -47,6 +47,8 @@ function App() {
   // Fire confetti from each new card after render
   useEffect(() => {
     if (newPaths.size === 0) return;
+    const count = newPaths.size;
+    const inner: ReturnType<typeof setTimeout>[] = [];
     // Small delay to let React render the cards
     const timer = setTimeout(() => {
       const cards = document.querySelectorAll('.project-card.new-project');
@@ -55,9 +57,9 @@ function App() {
         const x = (rect.left + rect.width / 2) / window.innerWidth;
         const y = (rect.top + rect.height / 2) / window.innerHeight;
         // Stagger bursts slightly
-        setTimeout(() => {
+        inner.push(setTimeout(() => {
           confetti({
-            particleCount: Math.min(40, Math.max(15, 60 / newPaths.size)),
+            particleCount: Math.min(40, Math.max(15, 60 / count)),
             spread: 50,
             origin: { x, y },
             startVelocity: 20,
@@ -67,10 +69,12 @@ function App() {
             scalar: 0.8,
             disableForReducedMotion: true,
           });
-        }, i * 150);
+        }, i * 150));
       });
     }, 100);
-    return () => clearTimeout(timer);
+    // Cancel the outer timer AND any staggered bursts still pending, so a rapid
+    // second scan (or unmount) doesn't fire bursts at stale card positions.
+    return () => { clearTimeout(timer); inner.forEach(clearTimeout); };
   }, [newPaths]);
 
   const showSyncResult = useCallback((diff?: ScanDiff) => {
@@ -139,9 +143,14 @@ function App() {
               })),
             };
           });
-          setProjectDetail(prev => prev && prev.project.path === msg.projectPath
-            ? { ...prev, project: { ...prev.project, poster: msg.posterUri } } : prev);
+          // The open project-detail modal re-derives from state.shelves (below),
+          // so no separate snapshot patch is needed here.
           break;
+        }
+        default: {
+          // Compile-time exhaustiveness: a new ExtToWebview variant must be handled.
+          const _exhaustive: never = msg;
+          void _exhaustive;
         }
       }
     };
@@ -244,10 +253,15 @@ function App() {
             onProjectClick={openProjectDetail} forgingPaths={state.forgingPaths} />
         );
       })()}
-      {projectDetail && (
-        <ProjectDetailModal project={projectDetail.project} rootPath={projectDetail.rootPath}
-          forging={state.forgingPaths.has(projectDetail.project.path)} onClose={closeProjectDetail} />
-      )}
+      {projectDetail && (() => {
+        // Re-derive from the latest scan so the open modal isn't a stale snapshot
+        // (mirrors the ShelfDetailModal pattern above).
+        const live = findProject(projectDetail.project.path) ?? projectDetail;
+        return (
+          <ProjectDetailModal project={live.project} rootPath={live.rootPath}
+            forging={state.forgingPaths.has(live.project.path)} onClose={closeProjectDetail} />
+        );
+      })()}
       {paletteOpen && <CommandPalette projects={allProjects} onClose={() => setPaletteOpen(false)} />}
     </>
   );
@@ -290,24 +304,30 @@ interface ShelfScreenProps {
 function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisible, booksetThreshold, forgingPaths, sortBy, onSortChange, staleFade, onStaleFadeToggle, newPaths, onProjectClick, onShelfClick }: ShelfScreenProps) {
   const q = searchQuery.toLowerCase().trim();
 
-  const grouped = new Map<string, Shelf[]>();
-  const allForRoot = new Map<string, Shelf[]>();
-  for (const shelf of shelves) {
-    const key = shelf.rootLabel;
-    if (!allForRoot.has(key)) allForRoot.set(key, []);
-    allForRoot.get(key)!.push(shelf);
-    if (!shelf.hidden) {
-      if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key)!.push(shelf);
+  // Grouping/sorting depends only on shelves, so memoize it — it shouldn't
+  // recompute on every search keystroke, sort change, or sync-toast tick.
+  const { sortedRoots, allForRoot } = useMemo(() => {
+    const grouped = new Map<string, Shelf[]>();
+    const allForRoot = new Map<string, Shelf[]>();
+    for (const shelf of shelves) {
+      const key = shelf.rootLabel;
+      let all = allForRoot.get(key);
+      if (!all) { all = []; allForRoot.set(key, all); }
+      all.push(shelf);
+      if (!shelf.hidden) {
+        let visible = grouped.get(key);
+        if (!visible) { visible = []; grouped.set(key, visible); }
+        visible.push(shelf);
+      }
     }
-  }
-
-  const sortedRoots = Array.from(grouped.entries()).sort(([, a], [, b]) => {
-    const aHas = a.some(s => s.starred || s.items.some(i => i.kind === 'project' && i.project.starred));
-    const bHas = b.some(s => s.starred || s.items.some(i => i.kind === 'project' && i.project.starred));
-    if (aHas !== bHas) return aHas ? -1 : 1;
-    return 0;
-  });
+    const sortedRoots = Array.from(grouped.entries()).sort(([, a], [, b]) => {
+      const aHas = a.some(s => s.starred || s.items.some(i => i.kind === 'project' && i.project.starred));
+      const bHas = b.some(s => s.starred || s.items.some(i => i.kind === 'project' && i.project.starred));
+      if (aHas !== bHas) return aHas ? -1 : 1;
+      return 0;
+    });
+    return { sortedRoots, allForRoot };
+  }, [shelves]);
 
   return (
     <div className="screen" style={{ display: 'flex' }}>

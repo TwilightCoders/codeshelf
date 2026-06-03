@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { Project } from '../../shared/types';
 import { postMsg, LANGUAGE_ICONS, LANGUAGE_COLORS, hashColor, timeAgo } from './helpers';
 
@@ -7,7 +8,9 @@ interface Props {
   forging: boolean;
   staleFade?: boolean;
   isNew?: boolean;
-  onClick: () => void;
+  // Stable opener (takes the path) so memoized cards aren't busted by a fresh
+  // per-card closure on every parent render.
+  onOpen: (path: string) => void;
 }
 
 function stalenessOpacity(lastModified: number): number {
@@ -19,7 +22,7 @@ function stalenessOpacity(lastModified: number): number {
   return 0.45;
 }
 
-export function ProjectCard({ project, rootPath, forging, staleFade, isNew, onClick }: Props) {
+export const ProjectCard = memo(function ProjectCard({ project, rootPath, forging, staleFade, isNew, onOpen }: Props) {
   const lang = project.primaryLanguage;
   const bgColor = lang ? LANGUAGE_COLORS[lang] ?? hashColor(project.name) : hashColor(project.name);
   const badge = lang ? LANGUAGE_ICONS[lang] ?? lang.slice(0, 2).toUpperCase() : '';
@@ -28,8 +31,8 @@ export function ProjectCard({ project, rootPath, forging, staleFade, isNew, onCl
 
   return (
     <div className={`project-card ${hasPoster ? 'has-poster' : ''} ${forging ? 'forging' : ''} ${isNew ? 'new-project' : ''}`}
-      title={project.path} onClick={onClick} role="button" tabIndex={0} aria-label={`Open ${project.name}`}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+      title={project.path} onClick={() => onOpen(project.path)} role="button" tabIndex={0} aria-label={`Open ${project.name}`}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(project.path); } }}
       style={{ opacity, transition: 'opacity 0.3s ease' }}>
       <div className={`card-poster-flip ${hasPoster ? 'flipped' : ''}`}>
         <div className="card-poster-face card-poster-fallback" style={{ backgroundColor: bgColor }}>
@@ -65,4 +68,4 @@ export function ProjectCard({ project, rootPath, forging, staleFade, isNew, onCl
       </div>
     </div>
   );
-}
+});

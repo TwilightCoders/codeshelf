@@ -218,6 +218,11 @@ export class CodeShelfPanel {
         await vscode.commands.executeCommand('workbench.action.openSettingsJson');
         break;
       }
+      default: {
+        // Compile-time exhaustiveness: a new WebviewToExt variant must be handled.
+        const _exhaustive: never = msg;
+        void _exhaustive;
+      }
     }
   }
 

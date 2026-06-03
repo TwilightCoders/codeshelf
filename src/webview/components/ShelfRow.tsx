@@ -65,7 +65,7 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy,
       {!collapsed && (
         <div className="shelf-row-content">
           {projects.map(p => (
-            <ProjectCard key={p.path} project={p} rootPath={shelf.rootPath} forging={forgingPaths.has(p.path)} staleFade={staleFade} isNew={newPaths.has(p.path)} onClick={() => onProjectClick(p.path)} />
+            <ProjectCard key={p.path} project={p} rootPath={shelf.rootPath} forging={forgingPaths.has(p.path)} staleFade={staleFade} isNew={newPaths.has(p.path)} onOpen={onProjectClick} />
           ))}
         </div>
       )}
