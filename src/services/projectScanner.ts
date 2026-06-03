@@ -454,11 +454,16 @@ export async function scanRoots(
         }
         return 0;
       });
+      // The synthetic "Projects" shelf is addressable for star/hide too — its
+      // path is the root itself, so resolve meta keyed by the root's basename.
+      const looseMeta = resolveShelfMeta(expandedRoot, rootConfig);
       shelves.push({
         name: 'Projects',
         path: expandedRoot,
         rootLabel,
         rootPath: expandedRoot,
+        starred: looseMeta?.starred,
+        hidden: looseMeta?.hidden,
         items: looseProjects,
       });
     }

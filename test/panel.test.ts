@@ -219,59 +219,73 @@ describe('transformSvg sanitization', () => {
 describe('applyItemMeta', () => {
   it('stars a shelf (direct child of root)', () => {
     const roots: RootsConfig = { '/root': {} };
-    applyItemMeta(roots, '/root', '/root/Gems', { starred: true });
+    applyItemMeta(roots, '/root', '/root/Gems', 'shelf', { starred: true });
     expect(roots['/root'].shelves?.['Gems']?.starred).toBe(true);
+  });
+
+  it('stars a collapsed/nested shelf by its basename (not as a project)', () => {
+    const roots: RootsConfig = { '/root': {} };
+    applyItemMeta(roots, '/root', '/root/Plugins/Editor', 'shelf', { starred: true });
+    // Keyed by basename — where resolveShelfMeta looks — NOT as Plugins.projects.*
+    expect(roots['/root'].shelves?.['Editor']?.starred).toBe(true);
+    expect(roots['/root'].shelves?.['Plugins']).toBeUndefined();
   });
 
   it('stars a project (deeper path)', () => {
     const roots: RootsConfig = { '/root': {} };
-    applyItemMeta(roots, '/root', '/root/Gems/glossary', { starred: true });
+    applyItemMeta(roots, '/root', '/root/Gems/glossary', 'project', { starred: true });
     expect(roots['/root'].shelves?.['Gems']?.projects?.['glossary']?.starred).toBe(true);
   });
 
   it('hides a shelf', () => {
     const roots: RootsConfig = { '/root': {} };
-    applyItemMeta(roots, '/root', '/root/Archive', { hidden: true });
+    applyItemMeta(roots, '/root', '/root/Archive', 'shelf', { hidden: true });
     expect(roots['/root'].shelves?.['Archive']?.hidden).toBe(true);
+  });
+
+  it('unstarring a shelf removes the starred key but keeps the entry', () => {
+    const roots: RootsConfig = { '/root': { shelves: { Gems: { starred: true } } } };
+    applyItemMeta(roots, '/root', '/root/Gems', 'shelf', { starred: false });
+    expect(roots['/root'].shelves?.['Gems']).toEqual({});
   });
 
   it('unstarring removes the starred key (falsy cleanup)', () => {
     const roots: RootsConfig = { '/root': { shelves: { Gems: { projects: { glossary: { starred: true } } } } } };
-    applyItemMeta(roots, '/root', '/root/Gems/glossary', { starred: false });
+    applyItemMeta(roots, '/root', '/root/Gems/glossary', 'project', { starred: false });
     // Project entry should be cleaned up entirely
     expect(roots['/root'].shelves?.['Gems']?.projects?.['glossary']).toBeUndefined();
   });
 
   it('cleans up empty project entries', () => {
     const roots: RootsConfig = { '/root': { shelves: { Gems: { projects: { glossary: { starred: true } } } } } };
-    applyItemMeta(roots, '/root', '/root/Gems/glossary', { starred: false });
+    applyItemMeta(roots, '/root', '/root/Gems/glossary', 'project', { starred: false });
     // projects should be gone, shelf should be gone, shelves should be gone
     expect(roots['/root'].shelves).toBeUndefined();
   });
 
   it('keeps empty shelf entries (prevents absorption)', () => {
     const roots: RootsConfig = { '/root': { shelves: { Gems: { hidden: true } } } };
-    applyItemMeta(roots, '/root', '/root/Gems', { hidden: false });
+    applyItemMeta(roots, '/root', '/root/Gems', 'shelf', { hidden: false });
     // Shelf entry should remain (empty but present)
     expect(roots['/root'].shelves?.['Gems']).toEqual({});
   });
 
   it('handles tilde-expanded root paths', () => {
     const roots: RootsConfig = { '~/Projects': {} };
-    applyItemMeta(roots, '/Users/alex/Projects', '/Users/alex/Projects/Apps', { starred: true }, '/Users/alex');
+    applyItemMeta(roots, '/Users/alex/Projects', '/Users/alex/Projects/Apps', 'shelf', { starred: true }, '/Users/alex');
     expect(roots['~/Projects'].shelves?.['Apps']?.starred).toBe(true);
   });
 
   it('does nothing when root is not found', () => {
     const roots: RootsConfig = { '/root': {} };
     const before = JSON.stringify(roots);
-    applyItemMeta(roots, '/nonexistent', '/nonexistent/Foo', { starred: true });
+    applyItemMeta(roots, '/nonexistent', '/nonexistent/Foo', 'shelf', { starred: true });
     expect(JSON.stringify(roots)).toBe(before);
   });
 
   it('can set multiple updates at once', () => {
     const roots: RootsConfig = { '/root': {} };
-    applyItemMeta(roots, '/root', '/root/Gems', { starred: true, hidden: true });
+    applyItemMeta(roots, '/root', '/root/Gems', 'shelf', { starred: true, hidden: true });
     expect(roots['/root'].shelves?.['Gems']?.starred).toBe(true);
     expect(roots['/root'].shelves?.['Gems']?.hidden).toBe(true);
   });

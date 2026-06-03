@@ -79,14 +79,19 @@ export interface ScanDiff {
   addedPaths: string[];
 }
 
+// Whether a starred/hidden item is a collection (shelf) or an individual
+// project — the webview knows which; the host must not guess it from path depth
+// (collapsed shelves are many levels deep but are still shelves).
+export type ItemKind = 'shelf' | 'project';
+
 // Webview -> Extension
 export type WebviewToExt =
   | { type: 'projects:requestScan' }
   | { type: 'project:open'; path: string; workspaceFile?: string }
   | { type: 'settings:addRoot'; path: string }
   | { type: 'settings:pickRoot' }
-  | { type: 'item:hide'; path: string; rootPath: string; hidden: boolean }
-  | { type: 'item:star'; path: string; rootPath: string; starred: boolean }
+  | { type: 'item:hide'; path: string; rootPath: string; hidden: boolean; kind: ItemKind }
+  | { type: 'item:star'; path: string; rootPath: string; starred: boolean; kind: ItemKind }
   | { type: 'poster:generate'; projectPath: string; userNotes?: string }
   | { type: 'poster:cancel'; projectPath: string }
   | { type: 'poster:attach'; projectPath: string }

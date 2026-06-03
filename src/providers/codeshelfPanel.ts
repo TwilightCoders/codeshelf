@@ -140,12 +140,12 @@ export class CodeShelfPanel {
         break;
       }
       case 'item:hide': {
-        await updateItemMeta(msg.rootPath, msg.path, { hidden: msg.hidden });
+        await updateItemMeta(msg.rootPath, msg.path, msg.kind, { hidden: msg.hidden });
         await this.scan();
         break;
       }
       case 'item:star': {
-        await updateItemMeta(msg.rootPath, msg.path, { starred: msg.starred });
+        await updateItemMeta(msg.rootPath, msg.path, msg.kind, { starred: msg.starred });
         await this.scan();
         break;
       }

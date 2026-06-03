@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { RootsConfig } from '../shared/types';
+import { RootsConfig, ItemKind } from '../shared/types';
 
 /**
  * The mutable scalar metadata fields the UI can set on a shelf or project.
@@ -49,14 +49,18 @@ export function getConfig() {
 }
 
 /**
- * Apply metadata updates to a roots config, determining whether the target
- * is a shelf (direct child of root) or project (deeper) by relative path depth.
- * Returns the mutated rootsConfig.
+ * Apply metadata updates to a roots config. `kind` says whether the target is a
+ * collection (shelf) or an individual project — supplied by the webview rather
+ * than guessed from path depth, so a collapsed shelf many levels below the root
+ * (or the synthetic loose "Projects" shelf, whose path is the root itself) is
+ * still keyed where the scanner's resolveShelfMeta/resolveProjectMeta will find
+ * it. Returns the mutated rootsConfig.
  */
 export function applyItemMeta(
   rootsConfig: RootsConfig,
   rootPath: string,
   itemPath: string,
+  kind: ItemKind,
   updates: ItemMetaUpdate,
   homePath?: string,
 ): RootsConfig {
@@ -69,15 +73,19 @@ export function applyItemMeta(
   const root = rootsConfig[rootKey];
   if (!root.shelves) root.shelves = {};
 
-  const relativePath = path.relative(expandedRoot, itemPath);
-  const parts: string[] = relativePath.split(path.sep);
-
-  if (parts.length === 1) {
-    // Prefer an existing full-path key, otherwise key by the shelf's basename.
-    const shelfKey = root.shelves[itemPath] ? itemPath : parts[0];
+  if (kind === 'shelf') {
+    // Key by basename (what resolveShelfMeta falls back to) regardless of depth,
+    // preferring an existing full-path key if the user wrote one. Empty entries
+    // are kept, not pruned, so an unstarred/unhidden shelf stays addressable.
+    const shelfKey = root.shelves[itemPath] ? itemPath : path.basename(itemPath);
     if (!root.shelves[shelfKey]) root.shelves[shelfKey] = {};
     applyUpdates(root.shelves[shelfKey], updates);
   } else {
+    // Project: the metadata nests under its shelf. Use the first path segment as
+    // the shelf key and the basename as the project key (preferring existing
+    // full-path keys), matching resolveProjectMeta's lookup.
+    const relativePath = path.relative(expandedRoot, itemPath);
+    const parts = relativePath.split(path.sep);
     const shelfKey = parts[0];
     const projKey = path.basename(itemPath);
     if (!root.shelves[shelfKey]) root.shelves[shelfKey] = {};
@@ -117,10 +125,11 @@ export async function addRoot(rootPath: string): Promise<boolean> {
 export async function updateItemMeta(
   rootPath: string,
   itemPath: string,
+  kind: ItemKind,
   updates: ItemMetaUpdate,
 ): Promise<void> {
   const config = vscode.workspace.getConfiguration('codeshelf');
   const roots = config.get<RootsConfig>('roots', {});
-  applyItemMeta(roots, rootPath, itemPath, updates, process.env.HOME);
+  applyItemMeta(roots, rootPath, itemPath, kind, updates, process.env.HOME);
   await config.update('roots', roots, vscode.ConfigurationTarget.Global);
 }

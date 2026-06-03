@@ -49,10 +49,10 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy,
           onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCollapsed(!collapsed); } }}>&#9656;</span>
         <span onClick={() => onShelfClick(shelf)} style={{ cursor: 'pointer' }}>{shelf.name}</span>
         <span className="shelf-actions">
-          <button className={`action-btn star-btn ${shelf.starred ? 'starred' : ''}`} title="Star" onClick={e => { e.stopPropagation(); postMsg({ type: 'item:star', path: shelf.path, rootPath: shelf.rootPath, starred: !shelf.starred }); }}>
+          <button className={`action-btn star-btn ${shelf.starred ? 'starred' : ''}`} title="Star" onClick={e => { e.stopPropagation(); postMsg({ type: 'item:star', path: shelf.path, rootPath: shelf.rootPath, starred: !shelf.starred, kind: 'shelf' }); }}>
             <i className={`codicon codicon-star-${shelf.starred ? 'full' : 'empty'}`} />
           </button>
-          <button className="action-btn hide-btn" title="Hide" onClick={e => { e.stopPropagation(); postMsg({ type: 'item:hide', path: shelf.path, rootPath: shelf.rootPath, hidden: true }); }}>
+          <button className="action-btn hide-btn" title="Hide" onClick={e => { e.stopPropagation(); postMsg({ type: 'item:hide', path: shelf.path, rootPath: shelf.rootPath, hidden: true, kind: 'shelf' }); }}>
             <i className="codicon codicon-eye-closed" />
           </button>
           <button className="action-btn reveal-btn" title="Reveal in Finder" onClick={e => { e.stopPropagation(); postMsg({ type: 'folder:reveal', path: shelf.path }); }}>

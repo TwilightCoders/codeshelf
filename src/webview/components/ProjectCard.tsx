@@ -41,10 +41,10 @@ export const ProjectCard = memo(function ProjectCard({ project, rootPath, forgin
         {hasPoster && <div className="card-poster-face card-poster-image" dangerouslySetInnerHTML={{ __html: project.poster! }} />}
       </div>
       <div className="card-overlay">
-        <button className={`action-btn star-btn ${project.starred ? 'starred' : ''}`} title="Star" onClick={e => { e.stopPropagation(); postMsg({ type: 'item:star', path: project.path, rootPath, starred: !project.starred }); }}>
+        <button className={`action-btn star-btn ${project.starred ? 'starred' : ''}`} title="Star" onClick={e => { e.stopPropagation(); postMsg({ type: 'item:star', path: project.path, rootPath, starred: !project.starred, kind: 'project' }); }}>
           <i className={`codicon codicon-star-${project.starred ? 'full' : 'empty'}`} />
         </button>
-        <button className="action-btn hide-btn" title="Hide" onClick={e => { e.stopPropagation(); postMsg({ type: 'item:hide', path: project.path, rootPath, hidden: true }); }}>
+        <button className="action-btn hide-btn" title="Hide" onClick={e => { e.stopPropagation(); postMsg({ type: 'item:hide', path: project.path, rootPath, hidden: true, kind: 'project' }); }}>
           <i className="codicon codicon-eye-closed" />
         </button>
       </div>
