@@ -5,11 +5,13 @@ A Steam Library-style project browser for VS Code. Point CodeShelf at the direct
 ## Features
 
 - **Automatic project discovery** — scans your configured roots for projects, detecting them by well-known markers (`package.json`, `Cargo.toml`, `go.mod`, `Gemfile`, `pyproject.toml`, `.git`, and more).
-- **Shelves & booksets** — top-level directories become shelves; nested groups become "booksets." Small groups are rolled up automatically so you never drown in nesting (tunable via `booksetThreshold`).
+- **Shelves, booksets & super-projects** — top-level directories become shelves; nested groups become "booksets" (small ones roll up automatically, tunable via `booksetThreshold`). A directory that carries an *umbrella* marker (`docker-compose.yml`, `turbo.json`, `lerna.json`, `pnpm-workspace.yaml`, `nx.json`) is treated as a single "super-project" rather than recursed into — so a monorepo shows as one card, not a scattering of its packages.
+- **Cmd/Ctrl+K quick-switcher** — a command palette that searches every project across all roots and shelves; arrow keys navigate, Enter opens (its workspace if it has one).
 - **Multi-folder workspaces** — a directory containing a `.code-workspace` is surfaced as a bookset, and the card can open the whole workspace.
 - **Poster art** — generate minimal SVG posters per project with the Claude CLI (if installed), or attach your own image. Injected SVG is sanitized before display.
 - **Star, hide, search, sort** — pin favorites, hide noise, filter across all projects or within a shelf, and sort by recency, name, or language.
 - **Stale fade** — optionally dim projects you haven't touched in a while.
+- **Themed & accessible** — a tokenized design system that adapts to light and dark VS Code themes, with keyboard-operable cards, focus rings, and reduced-motion support.
 - **Git worktrees are skipped** so a project only appears once.
 
 ## Commands
