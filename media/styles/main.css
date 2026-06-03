@@ -1574,3 +1574,175 @@ body.modal-open {
     transform: none;
   }
 }
+
+/* ============================================================
+   Cmd/Ctrl+K command palette — global project quick-switcher
+   ============================================================ */
+.cmdk-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh var(--sp-6) var(--sp-6);
+  background: color-mix(in srgb, var(--vscode-editor-background) 55%, transparent);
+  backdrop-filter: blur(3px);
+  animation: cmdk-fade var(--dur-fast) var(--ease-out);
+}
+
+.cmdk-panel {
+  width: 100%;
+  max-width: 640px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--vscode-menu-background, var(--vscode-editor-background));
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+  animation: cmdk-pop var(--dur-base) var(--ease-spring);
+}
+
+.cmdk-input-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-5) var(--sp-6);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.cmdk-input-row .codicon-search {
+  font-size: var(--fs-lg);
+  color: var(--vscode-descriptionForeground);
+}
+
+.cmdk-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--vscode-input-foreground, var(--vscode-editor-foreground));
+  font-family: inherit;
+  font-size: var(--fs-lg);
+}
+
+.cmdk-input::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+.cmdk-count {
+  font-size: var(--fs-xs);
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+}
+
+.cmdk-results {
+  overflow-y: auto;
+  padding: var(--sp-2);
+}
+
+.cmdk-empty {
+  padding: var(--sp-8) var(--sp-6);
+  text-align: center;
+  color: var(--vscode-descriptionForeground);
+  font-size: var(--fs-sm);
+}
+
+.cmdk-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+
+.cmdk-item.selected {
+  background: var(--vscode-list-hoverBackground, var(--surface-2));
+}
+
+.cmdk-badge {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  color: var(--vscode-editor-foreground);
+}
+
+.cmdk-name {
+  flex: 1 1 auto;
+  font-size: var(--fs-base);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmdk-branch {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--vscode-descriptionForeground);
+}
+
+.cmdk-context {
+  flex: 0 0 auto;
+  font-size: var(--fs-xs);
+  color: var(--vscode-descriptionForeground);
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+.cmdk-item .codicon-multiple-windows {
+  flex: 0 0 auto;
+  color: var(--link);
+  font-size: var(--fs-md);
+}
+
+.cmdk-footer {
+  display: flex;
+  gap: var(--sp-6);
+  padding: var(--sp-4) var(--sp-6);
+  border-top: 1px solid var(--hairline);
+  font-size: var(--fs-2xs);
+  color: var(--vscode-descriptionForeground);
+}
+
+.cmdk-footer kbd {
+  display: inline-block;
+  min-width: 16px;
+  padding: 1px var(--sp-2);
+  margin-right: 2px;
+  text-align: center;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-1);
+  font-family: var(--vscode-editor-font-family, monospace);
+}
+
+@keyframes cmdk-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes cmdk-pop {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cmdk-overlay,
+  .cmdk-panel {
+    animation: none;
+  }
+}

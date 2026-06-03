@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import confetti from 'canvas-confetti';
 import type { ExtToWebview, Shelf, Project, ScanDiff } from '../shared/types';
 import { postMsg } from './components/helpers';
@@ -7,6 +7,7 @@ import { asSortBy, type SortBy } from './components/pure';
 import { RootGroup } from './components/RootGroup';
 import { ShelfDetailModal } from './components/ShelfDetailModal';
 import { ProjectDetailModal } from './components/ProjectDetailModal';
+import { CommandPalette, type ProjectEntry } from './components/CommandPalette';
 
 // ── Timing constants (ms) ──
 
@@ -38,6 +39,7 @@ function App() {
   const [staleFade, setStaleFade] = useState(false);
   const [projectDetail, setProjectDetail] = useState<{ project: Project; rootPath: string } | null>(null);
   const [shelfDetail, setShelfDetail] = useState<Shelf | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [newPaths, setNewPaths] = useState<Set<string>>(new Set());
   const newPathsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const firstLoadDone = useRef(false);
@@ -182,13 +184,44 @@ function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (projectDetail) closeProjectDetail();
+        if (paletteOpen) setPaletteOpen(false);
+        else if (projectDetail) closeProjectDetail();
         else if (shelfDetail) closeShelfDetail();
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [projectDetail, shelfDetail, closeProjectDetail, closeShelfDetail]);
+  }, [paletteOpen, projectDetail, shelfDetail, closeProjectDetail, closeShelfDetail]);
+
+  // Cmd/Ctrl+K toggles the global project quick-switcher.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setPaletteOpen(o => !o);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
+
+  // Flat list of every project across all roots and shelves (hidden included) —
+  // the corpus the Cmd+K palette searches.
+  const allProjects = useMemo<ProjectEntry[]>(() => {
+    const entries: ProjectEntry[] = [];
+    for (const shelf of state.shelves) {
+      for (const item of shelf.items) {
+        if (item.kind === 'project') {
+          entries.push({ project: item.project, rootLabel: shelf.rootLabel, shelfName: shelf.name });
+        } else {
+          for (const p of item.projects) {
+            entries.push({ project: p, rootLabel: shelf.rootLabel, shelfName: shelf.name });
+          }
+        }
+      }
+    }
+    return entries;
+  }, [state.shelves]);
 
   if (state.screen === 'setup') return <SetupScreen />;
   if (state.screen === 'loading') return <LoadingScreen />;
@@ -215,6 +248,7 @@ function App() {
         <ProjectDetailModal project={projectDetail.project} rootPath={projectDetail.rootPath}
           forging={state.forgingPaths.has(projectDetail.project.path)} onClose={closeProjectDetail} />
       )}
+      {paletteOpen && <CommandPalette projects={allProjects} onClose={() => setPaletteOpen(false)} />}
     </>
   );
 }

@@ -472,6 +472,56 @@ describe('hidden shelves', () => {
   });
 });
 
+// ── Command Palette (Cmd/Ctrl+K) ──
+
+async function openPalette(): Promise<void> {
+  await page.keyboard.down('Control');
+  await page.keyboard.press('k');
+  await page.keyboard.up('Control');
+  await new Promise(r => setTimeout(r, 200));
+}
+
+describe('command palette', () => {
+  it('opens on Ctrl+K and lists projects, including ones from hidden shelves', async () => {
+    await openPalette();
+    expect(await page.$('.cmdk-panel')).not.toBeNull();
+    const names = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.cmdk-item .cmdk-name'), e => e.textContent));
+    expect(names).toContain('glossary');
+    // 'old-project' lives under the hidden 'Archive' shelf — global search still finds it
+    expect(names).toContain('old-project');
+  });
+
+  it('filters results as you type', async () => {
+    await openPalette();
+    await page.type('.cmdk-input', 'radio-client');
+    await new Promise(r => setTimeout(r, 150));
+    const names = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.cmdk-item .cmdk-name'), e => e.textContent));
+    expect(names).toContain('radio-client');
+    expect(names.length).toBeLessThanOrEqual(2);
+  });
+
+  it('Escape closes the palette', async () => {
+    await openPalette();
+    expect(await page.$('.cmdk-panel')).not.toBeNull();
+    await page.keyboard.press('Escape');
+    await new Promise(r => setTimeout(r, 150));
+    expect(await page.$('.cmdk-panel')).toBeNull();
+  });
+
+  it('Enter opens the selected project (posts project:open)', async () => {
+    const messages: string[] = [];
+    page.on('console', msg => messages.push(msg.text()));
+    await openPalette();
+    await page.type('.cmdk-input', 'radio-client');
+    await new Promise(r => setTimeout(r, 150));
+    await page.keyboard.press('Enter');
+    await new Promise(r => setTimeout(r, 150));
+    expect(messages.some(m => m.includes('project:open') && m.includes('radio-client'))).toBe(true);
+  });
+});
+
 // ── Poster Generation (Mock) ──
 
 describe('poster generation (round-trip)', () => {
