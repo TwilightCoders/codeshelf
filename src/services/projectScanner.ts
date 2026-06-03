@@ -47,24 +47,25 @@ async function isWorktree(dir: string): Promise<boolean> {
   }
 }
 
-async function detectMarkers(dir: string): Promise<string[]> {
-  const markerNames = Object.keys(PROJECT_MARKERS);
-  // Check all file markers concurrently; Promise.all preserves order.
-  const hits = await Promise.all(markerNames.map(async marker => {
-    if (marker === '.git') {
-      // Only count .git if it's a real repo, not a worktree
-      return (await exists(path.join(dir, marker))) && !(await isWorktree(dir)) ? marker : null;
-    }
-    return (await exists(path.join(dir, marker))) ? marker : null;
-  }));
-  const found = hits.filter((m): m is string => m !== null);
-  try {
-    const entries = await fs.promises.readdir(dir);
-    for (const pattern of GLOB_MARKERS) {
-      const ext = pattern.replace('*', '');
-      if (entries.some(e => e.endsWith(ext))) found.push(pattern);
-    }
-  } catch { /* skip */ }
+// Detect project markers in a directory. The caller may pass the directory's
+// entry names (it usually already read them) to avoid a redundant readdir;
+// otherwise they are read here. File markers are resolved by set membership —
+// only `.git` needs a stat, and only when present, to tell a real repo from a
+// worktree (whose .git is a file, not a directory).
+async function detectMarkers(dir: string, entries?: string[]): Promise<string[]> {
+  const names = entries ?? await fs.promises.readdir(dir).catch((): string[] => []);
+  const present = new Set(names);
+  const found: string[] = [];
+
+  for (const marker of Object.keys(PROJECT_MARKERS)) {
+    if (!present.has(marker)) continue;
+    if (marker === '.git' && await isWorktree(dir)) continue;
+    found.push(marker);
+  }
+  for (const pattern of GLOB_MARKERS) {
+    const ext = pattern.replace('*', '');
+    if (names.some(e => e.endsWith(ext))) found.push(pattern);
+  }
   return found;
 }
 
@@ -190,9 +191,13 @@ async function scanDirectory(
   const perSubdir = await mapLimit(subdirs, SCAN_CONCURRENCY, async (subdir): Promise<ScanResult> => {
     const local: ScanResult = { projects: [], groups: [] };
 
-    // Parse the workspace file once and reuse it for both the bookset check
-    // and (for plain projects) buildProject.
-    const wsInfo = await parseWorkspaceFile(subdir);
+    // Read this directory's entries ONCE (with file types) and feed all three
+    // consumers — workspace-file lookup, marker detection, and the single-child
+    // collapse check — instead of re-reading the same directory three times.
+    const dirents = await fs.promises.readdir(subdir, { withFileTypes: true }).catch((): fs.Dirent[] => []);
+    const entryNames = dirents.map(d => d.name);
+
+    const wsInfo = await parseWorkspaceFile(subdir, entryNames);
     const wsItems = await tryWorkspaceBookset(subdir, wsInfo, shelfMeta);
     if (wsItems) {
       const groupName = namePrefix ? `${namePrefix}/${path.basename(subdir)}` : path.basename(subdir);
@@ -200,7 +205,7 @@ async function scanDirectory(
       return local;
     }
 
-    const markers = await detectMarkers(subdir);
+    const markers = await detectMarkers(subdir, entryNames);
     if (markers.length > 0) {
       const pMeta = resolveProjectMeta(subdir, shelfMeta);
       if (!pMeta?.hidden) {
@@ -212,9 +217,8 @@ async function scanDirectory(
         local.projects.push(project);
       }
     } else if (currentDepth < maxDepth) {
-      // Check for single-child collapse
-      const childEntries = await fs.promises.readdir(subdir, { withFileTypes: true }).catch((): fs.Dirent[] => []);
-      const childDirs = childEntries.filter(e => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.'));
+      // Single-child collapse — reuse the dirents already read above.
+      const childDirs = dirents.filter(e => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.'));
       const subdirName = namePrefix ? `${namePrefix}/${path.basename(subdir)}` : path.basename(subdir);
 
       if (childDirs.length === 1) {
@@ -345,9 +349,10 @@ export async function scanRoots(
 
       const shelfMeta = resolveShelfMeta(topDir.path, rootConfig);
 
-      // Parse the workspace file once; reuse for the bookset check and, if this
-      // turns out to be a plain project, buildProject below.
-      const topWsInfo = await parseWorkspaceFile(topDir.path);
+      // Read the top dir's entries once; reuse for the workspace-file lookup and
+      // marker detection (the recurse branch re-reads with file types itself).
+      const topEntryNames = await fs.promises.readdir(topDir.path).catch((): string[] => []);
+      const topWsInfo = await parseWorkspaceFile(topDir.path, topEntryNames);
 
       // Check for workspace-as-bookset at the shelf level
       const wsItems = await tryWorkspaceBookset(topDir.path, topWsInfo, shelfMeta);
@@ -373,7 +378,7 @@ export async function scanRoots(
       }
 
       // Check if it's a regular project
-      const topMarkers = await detectMarkers(topDir.path);
+      const topMarkers = await detectMarkers(topDir.path, topEntryNames);
       if (topMarkers.length > 0) {
         const pMeta = resolveProjectMeta(topDir.path, shelfMeta);
         if (!pMeta?.hidden) {

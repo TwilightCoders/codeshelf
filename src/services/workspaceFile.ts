@@ -8,16 +8,21 @@ export interface WorkspaceInfo {
   settings?: Record<string, unknown>;
 }
 
-export async function parseWorkspaceFile(dir: string): Promise<WorkspaceInfo | undefined> {
-  // Find .code-workspace file in directory
-  let entries: string[];
-  try {
-    entries = await fs.promises.readdir(dir);
-  } catch {
-    return undefined;
+// `entries` may be supplied by the caller (which usually already read the
+// directory) to avoid a redundant readdir.
+export async function parseWorkspaceFile(dir: string, entries?: string[]): Promise<WorkspaceInfo | undefined> {
+  let names: string[];
+  if (entries) {
+    names = entries;
+  } else {
+    try {
+      names = await fs.promises.readdir(dir);
+    } catch {
+      return undefined;
+    }
   }
 
-  const wsFile = entries.find(e => e.endsWith('.code-workspace'));
+  const wsFile = names.find(e => e.endsWith('.code-workspace'));
   if (!wsFile) return undefined;
 
   const filePath = path.join(dir, wsFile);
