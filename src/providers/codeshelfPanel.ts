@@ -5,9 +5,10 @@ import { ExtToWebview, WebviewToExt, Shelf, ScanDiff, Project } from '../shared/
 import { STORAGE_KEYS } from '../shared/constants';
 import { scanRoots } from '../services/projectScanner';
 import { detectCapabilities } from '../services/capabilities';
-import { PosterGenerator } from '../services/posterGenerator';
+import { PosterGenerator, posterCachePath } from '../services/posterGenerator';
 import { renderWebviewHtml } from './htmlTemplate';
 import { getConfig, addRoot, updateItemMeta } from './config';
+import { transformSvg } from '../services/svgEmbed';
 
 export function collectProjectPaths(shelves: Shelf[]): Set<string> {
   const paths = new Set<string>();
@@ -38,48 +39,6 @@ export function computeDiff(oldShelves: Shelf[], newShelves: Shelf[]): ScanDiff 
   }
   const added = addedPaths.length;
   return { added, removed, changed: added > 0 || removed > 0, addedPaths };
-}
-
-/**
- * Strip active content from SVG markup before it is injected via
- * dangerouslySetInnerHTML. The webview CSP already blocks inline <script>,
- * but SVG can also carry event-handler attributes, <foreignObject> HTML, and
- * javascript: URLs — remove those as defense-in-depth.
- */
-export function sanitizeSvg(svg: string): string {
-  return svg
-    .replace(/<script\b[\s\S]*?<\/script>/gi, '')
-    .replace(/<script\b[^>]*\/>/gi, '')
-    .replace(/<foreignObject\b[\s\S]*?<\/foreignObject>/gi, '')
-    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
-    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
-    .replace(/((?:xlink:)?href)\s*=\s*"\s*javascript:[^"]*"/gi, '$1="#"')
-    .replace(/((?:xlink:)?href)\s*=\s*'\s*javascript:[^']*'/gi, "$1='#'");
-}
-
-/**
- * Transform raw SVG markup for proper embedding:
- * - Sanitize active content (scripts, event handlers, foreignObject)
- * - Add viewBox from width/height if missing
- * - Strip hardcoded width/height
- * - Add preserveAspectRatio for cover-style scaling
- */
-export function transformSvg(svg: string): string | undefined {
-  if (!svg.includes('<svg')) return undefined;
-  return sanitizeSvg(svg).replace(/<svg([^>]*)>/, (_match: string, attrs: string) => {
-    let newAttrs = attrs;
-    const wMatch = attrs.match(/width="(\d+)"/);
-    const hMatch = attrs.match(/height="(\d+)"/);
-    if (!attrs.includes('viewBox') && wMatch && hMatch) {
-      newAttrs += ` viewBox="0 0 ${wMatch[1]} ${hMatch[1]}"`;
-    }
-    newAttrs = newAttrs.replace(/\s*width="[^"]*"/g, '');
-    newAttrs = newAttrs.replace(/\s*height="[^"]*"/g, '');
-    if (!newAttrs.includes('preserveAspectRatio')) {
-      newAttrs += ' preserveAspectRatio="xMidYMid slice"';
-    }
-    return `<svg${newAttrs}>`;
-  });
 }
 
 export class CodeShelfPanel {
@@ -329,12 +288,10 @@ export class CodeShelfPanel {
 
     const sourcePath = picked[0].fsPath;
 
-    // Copy to cache dir
-    const cacheDir = path.join(this.context.globalStorageUri.fsPath, 'posters');
-    await fs.promises.mkdir(cacheDir, { recursive: true });
-    const hash = Buffer.from(project.path).toString('base64url');
+    // Derive the cache path from the shared helper so it matches PosterGenerator.
     const ext = path.extname(sourcePath);
-    const destPath = path.join(cacheDir, `${hash}${ext}`);
+    const destPath = posterCachePath(this.context.globalStorageUri.fsPath, project.path, ext);
+    await fs.promises.mkdir(path.dirname(destPath), { recursive: true });
 
     // Remove any existing cached poster (might be different extension)
     const existingPoster = this.posterGenerator?.getCachedPosterPath(project);

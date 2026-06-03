@@ -23,6 +23,17 @@ export function extractSvg(stdout: string): string | undefined {
   return match ? match[0] : undefined;
 }
 
+/**
+ * Cache path for a project's poster: `<cacheDir>/posters/<base64url(path)><ext>`.
+ * The single source of truth for the on-disk poster layout — both the generator
+ * and the panel's "attach custom image" path derive their paths here so they
+ * can't drift.
+ */
+export function posterCachePath(cacheDir: string, projectPath: string, ext = '.svg'): string {
+  const hash = Buffer.from(projectPath).toString('base64url');
+  return path.join(cacheDir, 'posters', `${hash}${ext}`);
+}
+
 type PosterCallback = (result: PosterResult) => void;
 
 export class PosterGenerator {
@@ -46,8 +57,7 @@ export class PosterGenerator {
   }
 
   private posterPath(project: Project): string {
-    const hash = Buffer.from(project.path).toString('base64url');
-    return path.join(this.cacheDir, 'posters', `${hash}.svg`);
+    return posterCachePath(this.cacheDir, project.path);
   }
 
   public getCachedPosterPath(project: Project): string | undefined {
