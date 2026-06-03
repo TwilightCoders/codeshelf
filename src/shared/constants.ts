@@ -25,6 +25,22 @@ export const PROJECT_MARKERS: Record<string, string> = {
 
 export const GLOB_MARKERS = ['*.gemspec', '*.sln', '*.csproj', '*.xcodeproj', '*.xcworkspace', '*.code-workspace'];
 
+// "Umbrella" markers identify a directory that is itself a single project made
+// of sub-projects — a monorepo / multi-service repo you open as ONE unit, not a
+// collection of independent projects. They are checked only when no regular
+// PROJECT_MARKERS are present (precedence: regular markers > umbrella > recurse),
+// so such a directory becomes one "super-project" card instead of being walked
+// into as a shelf. (A multi-folder *.code-workspace is handled separately as a
+// bookset; a single .git repo already collapses via PROJECT_MARKERS.)
+export const UMBRELLA_MARKERS = new Set([
+  'docker-compose.yml',
+  'docker-compose.yaml',
+  'turbo.json',
+  'lerna.json',
+  'pnpm-workspace.yaml',
+  'nx.json',
+]);
+
 export const SKIP_DIRS = new Set([
   'node_modules', '.git', 'vendor', 'target', 'build', 'dist',
   '.bundle', '__pycache__', '.tox', '.venv', 'venv', '.next',

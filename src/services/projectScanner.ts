@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
   PROJECT_MARKERS, GLOB_MARKERS, SKIP_DIRS,
-  LANGUAGE_PRIORITY,
+  LANGUAGE_PRIORITY, UMBRELLA_MARKERS,
 } from '../shared/constants';
 import { Project, Shelf, ShelfItem, ProjectItem, RootsConfig, RootConfig, ShelfMeta, ProjectMeta } from '../shared/types';
 import { getBranch } from './gitInfo';
@@ -67,6 +67,13 @@ async function detectMarkers(dir: string, entries?: string[]): Promise<string[]>
     if (names.some(e => e.endsWith(ext))) found.push(pattern);
   }
   return found;
+}
+
+// Umbrella markers present in a directory (monorepo / multi-service roots that
+// should be treated as one super-project rather than recursed into). Pure — works
+// off the already-read entry names.
+function detectUmbrellaMarkers(entryNames: string[]): string[] {
+  return entryNames.filter(name => UMBRELLA_MARKERS.has(name));
 }
 
 export function inferLanguage(markers: string[]): string | undefined {
@@ -206,10 +213,13 @@ async function scanDirectory(
     }
 
     const markers = await detectMarkers(subdir, entryNames);
-    if (markers.length > 0) {
+    const umbrella = markers.length > 0 ? [] : detectUmbrellaMarkers(entryNames);
+    if (markers.length > 0 || umbrella.length > 0) {
+      // Regular markers → individual project; otherwise umbrella markers → a
+      // single "super-project" card (do NOT recurse into its sub-projects).
       const pMeta = resolveProjectMeta(subdir, shelfMeta);
       if (!pMeta?.hidden) {
-        const project = await buildProject(subdir, markers, pMeta, wsInfo);
+        const project = await buildProject(subdir, markers.length > 0 ? markers : umbrella, pMeta, wsInfo);
         // Apply collapsed name prefix if we're inside a single-child chain
         if (namePrefix) {
           project.name = `${namePrefix}/${project.name}`;
@@ -377,12 +387,14 @@ export async function scanRoots(
         continue;
       }
 
-      // Check if it's a regular project
+      // Check if it's a regular project, or a single super-project (umbrella
+      // markers, e.g. a monorepo root with no regular marker of its own).
       const topMarkers = await detectMarkers(topDir.path, topEntryNames);
-      if (topMarkers.length > 0) {
+      const topUmbrella = topMarkers.length > 0 ? [] : detectUmbrellaMarkers(topEntryNames);
+      if (topMarkers.length > 0 || topUmbrella.length > 0) {
         const pMeta = resolveProjectMeta(topDir.path, shelfMeta);
         if (!pMeta?.hidden) {
-          const project = await buildProject(topDir.path, topMarkers, pMeta, topWsInfo);
+          const project = await buildProject(topDir.path, topMarkers.length > 0 ? topMarkers : topUmbrella, pMeta, topWsInfo);
           looseProjects.push({ kind: 'project', project });
         }
         continue;

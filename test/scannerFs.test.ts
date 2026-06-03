@@ -14,6 +14,7 @@ import type { Shelf } from '../src/shared/types';
 
 let root1: string;
 let root2: string;
+let root3: string;
 let tmp: string;
 
 async function mkproj(dir: string, marker: string, contents = '{}') {
@@ -25,6 +26,7 @@ beforeAll(async () => {
   tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'codeshelf-scan-'));
   root1 = path.join(tmp, 'root1');
   root2 = path.join(tmp, 'root2');
+  root3 = path.join(tmp, 'root3');
 
   // root1: loose project + a real shelf + single-child collapse + a worktree
   await mkproj(path.join(root1, 'soloProj'), 'package.json');
@@ -51,6 +53,20 @@ beforeAll(async () => {
     path.join(ws, 'team.code-workspace'),
     JSON.stringify({ folders: [{ path: './frontend' }, { path: './backend' }, { path: './shared' }, { path: './infra' }] }),
   );
+
+  // root3: umbrella markers → super-projects (not recursed into).
+  // Top-level monorepo: turbo.json at root, no regular marker of its own.
+  await fs.promises.mkdir(path.join(root3, 'Monorepo'), { recursive: true });
+  await fs.promises.writeFile(path.join(root3, 'Monorepo', 'turbo.json'), '{}');
+  await mkproj(path.join(root3, 'Monorepo', 'packages', 'web'), 'package.json');
+  await mkproj(path.join(root3, 'Monorepo', 'packages', 'api'), 'go.mod');
+  // A collection shelf "Services" with a nested docker-compose super-project + loose projects.
+  await fs.promises.mkdir(path.join(root3, 'Services', 'gateway', 'svc-a'), { recursive: true });
+  await fs.promises.mkdir(path.join(root3, 'Services', 'gateway', 'svc-b'), { recursive: true });
+  await fs.promises.writeFile(path.join(root3, 'Services', 'gateway', 'docker-compose.yml'), 'services: {}');
+  for (const p of ['p1', 'p2', 'p3', 'p4']) {
+    await mkproj(path.join(root3, 'Services', p), 'package.json');
+  }
 });
 
 afterAll(async () => {
@@ -110,5 +126,34 @@ describe('scanRoots (filesystem)', () => {
   it('returns no shelves for an unreadable root', async () => {
     const shelves = await scanRoots({ [path.join(tmp, 'does-not-exist')]: {} }, 3);
     expect(shelves).toEqual([]);
+  });
+
+  // ── Umbrella markers → super-projects ──
+
+  it('treats a top-level umbrella-marked dir as a single super-project, not a shelf', async () => {
+    const shelves = await scanRoots({ [root3]: {} }, 3);
+    // Monorepo has turbo.json but no regular marker → one super-project card,
+    // NOT a "Monorepo" shelf, and its packages are not surfaced separately.
+    expect(shelf(shelves, 'Monorepo')).toBeUndefined();
+    const allProjects = shelves.flatMap(s => s.items).flatMap(i => i.kind === 'project' ? [i.project] : i.projects);
+    const mono = allProjects.find(p => p.name === 'Monorepo');
+    expect(mono).toBeDefined();
+    expect(mono!.markers).toContain('turbo.json');
+    expect(allProjects.some(p => p.name === 'web' || p.name === 'api')).toBe(false);
+  });
+
+  it('treats a nested umbrella-marked dir as a super-project inside its shelf', async () => {
+    const shelves = await scanRoots({ [root3]: {} }, 3);
+    const services = shelf(shelves, 'Services');
+    expect(services).toBeDefined();
+    const names = services!.items.map(i => (i.kind === 'project' ? i.project.name : i.name));
+    // gateway (docker-compose.yml) is one super-project card; its svc-* children
+    // are not recursed into; the four loose projects sit alongside it.
+    expect(names).toContain('gateway');
+    expect(names).toEqual(expect.arrayContaining(['p1', 'p2', 'p3', 'p4']));
+    expect(names).not.toContain('svc-a');
+    expect(names).not.toContain('svc-b');
+    const gateway = services!.items.find(i => i.kind === 'project' && i.project.name === 'gateway');
+    expect(gateway?.kind === 'project' && gateway.project.markers).toContain('docker-compose.yml');
   });
 });
