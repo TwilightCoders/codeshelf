@@ -4,6 +4,7 @@ import {
   collectProjects, flattenBooksets, sortProjects,
 } from '../src/webview/components/pure';
 import type { ShelfItem, Project } from '../src/shared/types';
+import { projectOf } from './support';
 
 function makeProject(name: string, overrides: Partial<Project> = {}): Project {
   return {
@@ -101,7 +102,7 @@ describe('flattenBooksets', () => {
     const items: ShelfItem[] = [{ kind: 'project', project: makeProject('a') }];
     const result = flattenBooksets(items);
     expect(result).toHaveLength(1);
-    expect((result[0] as { kind: 'project'; project: Project }).project.name).toBe('a');
+    expect(projectOf(result[0]).name).toBe('a');
   });
 
   it('flattens booksets with prefixed names', () => {
@@ -111,8 +112,8 @@ describe('flattenBooksets', () => {
     const result = flattenBooksets(items);
     expect(result).toHaveLength(2);
     expect(result.every(i => i.kind === 'project')).toBe(true);
-    expect((result[0] as { kind: 'project'; project: Project }).project.name).toBe('Games/Starfield');
-    expect((result[1] as { kind: 'project'; project: Project }).project.name).toBe('Games/Tetris');
+    expect(projectOf(result[0]).name).toBe('Games/Starfield');
+    expect(projectOf(result[1]).name).toBe('Games/Tetris');
   });
 });
 

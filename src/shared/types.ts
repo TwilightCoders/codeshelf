@@ -27,6 +27,11 @@ export type ShelfItem =
   | { kind: 'project'; project: Project }
   | { kind: 'bookset'; name: string; path: string; projects: Project[] };
 
+// Narrowed views of the ShelfItem union, for code/tests that have already
+// established which variant they hold (avoids `as` assertions on the union).
+export type ProjectItem = Extract<ShelfItem, { kind: 'project' }>;
+export type BooksetItem = Extract<ShelfItem, { kind: 'bookset' }>;
+
 // ── Settings schema ──
 
 export interface ProjectMeta {

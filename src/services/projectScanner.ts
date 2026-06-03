@@ -4,7 +4,7 @@ import {
   PROJECT_MARKERS, GLOB_MARKERS, SKIP_DIRS,
   LANGUAGE_PRIORITY,
 } from '../shared/constants';
-import { Project, Shelf, ShelfItem, RootsConfig, RootConfig, ShelfMeta, ProjectMeta } from '../shared/types';
+import { Project, Shelf, ShelfItem, ProjectItem, RootsConfig, RootConfig, ShelfMeta, ProjectMeta } from '../shared/types';
 import { getBranch } from './gitInfo';
 import { parseWorkspaceFile, WorkspaceInfo } from './workspaceFile';
 
@@ -128,7 +128,7 @@ async function tryWorkspaceBookset(
   dir: string,
   wsInfo: WorkspaceInfo | undefined,
   shelfMeta?: ShelfMeta,
-): Promise<ShelfItem[] | null> {
+): Promise<ProjectItem[] | null> {
   if (!wsInfo || wsInfo.folders.length <= 1) return null;
 
   // If one of the folders is "." (the directory itself), this is a single
@@ -139,7 +139,7 @@ async function tryWorkspaceBookset(
 
   // Multi-folder workspace → each folder is a sub-project. Build them
   // concurrently; the parent workspace file opens the whole thing.
-  const built = await Promise.all(wsInfo.folders.map(async folderPath => {
+  const built = await Promise.all(wsInfo.folders.map(async (folderPath): Promise<ProjectItem | null> => {
     if (!await exists(folderPath)) return null;
     const markers = await detectMarkers(folderPath);
     if (markers.length === 0) markers.push('.code-workspace'); // mark it anyway
@@ -147,9 +147,9 @@ async function tryWorkspaceBookset(
     if (pMeta?.hidden) return null;
     const project = await buildProject(folderPath, markers, pMeta, null);
     project.workspaceFile = wsInfo.filePath;
-    return { kind: 'project', project } as ShelfItem;
+    return { kind: 'project', project };
   }));
-  const items = built.filter((i): i is ShelfItem => i !== null);
+  const items = built.filter((i): i is ProjectItem => i !== null);
   return items.length > 0 ? items : null;
 }
 
@@ -196,7 +196,7 @@ async function scanDirectory(
     const wsItems = await tryWorkspaceBookset(subdir, wsInfo, shelfMeta);
     if (wsItems) {
       const groupName = namePrefix ? `${namePrefix}/${path.basename(subdir)}` : path.basename(subdir);
-      local.groups.push({ name: groupName, path: subdir, projects: wsItems.map(i => (i as { kind: 'project'; project: Project }).project) });
+      local.groups.push({ name: groupName, path: subdir, projects: wsItems.map(i => i.project) });
       return local;
     }
 
@@ -213,8 +213,8 @@ async function scanDirectory(
       }
     } else if (currentDepth < maxDepth) {
       // Check for single-child collapse
-      const childEntries = await fs.promises.readdir(subdir, { withFileTypes: true }).catch(() => []);
-      const childDirs = (childEntries as fs.Dirent[]).filter(e => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.'));
+      const childEntries = await fs.promises.readdir(subdir, { withFileTypes: true }).catch((): fs.Dirent[] => []);
+      const childDirs = childEntries.filter(e => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.'));
       const subdirName = namePrefix ? `${namePrefix}/${path.basename(subdir)}` : path.basename(subdir);
 
       if (childDirs.length === 1) {

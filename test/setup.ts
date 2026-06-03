@@ -2,7 +2,7 @@ import { vi } from 'vitest';
 
 // jest-mock-vscode uses jest.fn() internally — shim it for vitest
 const jestShim = { fn: vi.fn, spyOn: vi.spyOn };
-(globalThis as Record<string, unknown>).jest = jestShim;
+Object.assign(globalThis, { jest: jestShim });
 
 // Mock the vscode module for extension host unit tests
 vi.mock('vscode', () => {

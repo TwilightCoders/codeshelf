@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import type { ExtToWebview, Shelf, Project, ScanDiff } from '../shared/types';
 import { postMsg } from './components/helpers';
-import type { SortBy } from './components/pure';
+import { asSortBy, type SortBy } from './components/pure';
 import { RootGroup } from './components/RootGroup';
 import { ShelfDetailModal } from './components/ShelfDetailModal';
 import { ProjectDetailModal } from './components/ProjectDetailModal';
@@ -95,16 +95,16 @@ function App() {
             firstLoadDone.current = true;
             // After React renders, stamp --stagger-i on each card and add class
             requestAnimationFrame(() => {
-              const cards = document.querySelectorAll('.project-card');
+              const cards = document.querySelectorAll<HTMLElement>('.project-card');
               cards.forEach((card, i) => {
-                (card as HTMLElement).style.setProperty('--stagger-i', String(i));
+                card.style.setProperty('--stagger-i', String(i));
                 card.classList.add('stagger-in');
               });
               // Remove stagger class after all animations finish
               setTimeout(() => {
                 cards.forEach(card => {
                   card.classList.remove('stagger-in');
-                  (card as HTMLElement).style.removeProperty('--stagger-i');
+                  card.style.removeProperty('--stagger-i');
                 });
               }, cards.length * STAGGER_STEP_MS + STAGGER_TAIL_MS);
             });
@@ -285,7 +285,7 @@ function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisib
             <input type="text" className="search-input" placeholder="Search projects..." value={searchQuery} onChange={e => onSearchChange(e.target.value)} />
             {searchQuery && <button className="search-clear" onClick={() => onSearchChange('')}>&times;</button>}
           </div>
-          <select className="sort-select" value={sortBy} onChange={e => onSortChange(e.target.value as SortBy)} title="Sort projects">
+          <select className="sort-select" value={sortBy} onChange={e => onSortChange(asSortBy(e.target.value))} title="Sort projects">
             <option value="date">Recent</option>
             <option value="name">A-Z</option>
             <option value="language">Language</option>

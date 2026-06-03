@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { inferLanguage, rollupItems, rollupShelf, ROLLUP_THRESHOLD } from '../src/services/projectScanner';
 import type { ShelfItem, Project } from '../src/shared/types';
+import { projectOf } from './support';
 
 // ── Helpers ──
 
@@ -75,8 +76,8 @@ describe('rollupItems', () => {
     const result = rollupItems(items);
     expect(result).toHaveLength(2);
     expect(result.every(i => i.kind === 'project')).toBe(true);
-    expect((result[0] as { kind: 'project'; project: Project }).project.name).toBe('small/x');
-    expect((result[1] as { kind: 'project'; project: Project }).project.name).toBe('small/y');
+    expect(projectOf(result[0]).name).toBe('small/x');
+    expect(projectOf(result[1]).name).toBe('small/y');
   });
 
   it('keeps booksets with > ROLLUP_THRESHOLD projects', () => {
@@ -112,7 +113,7 @@ describe('rollupShelf', () => {
     expect(result.keep).toBe(false);
     if (!result.keep) {
       expect(result.looseProjects).toHaveLength(2);
-      expect((result.looseProjects[0] as { kind: 'project'; project: Project }).project.name).toBe('MyShelf/a');
+      expect(projectOf(result.looseProjects[0]).name).toBe('MyShelf/a');
     }
   });
 
@@ -137,7 +138,7 @@ describe('rollupShelf', () => {
     if (!result.keep) {
       expect(result.looseProjects).toHaveLength(2);
       // Name should be: ShelfName/BooksetName/ProjectName
-      expect((result.looseProjects[0] as { kind: 'project'; project: Project }).project.name).toBe('Wrapper/sub/x');
+      expect(projectOf(result.looseProjects[0]).name).toBe('Wrapper/sub/x');
     }
   });
 

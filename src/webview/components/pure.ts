@@ -62,6 +62,15 @@ export function flattenBooksets(items: ShelfItem[]): ShelfItem[] {
 
 export type SortBy = 'date' | 'name' | 'language';
 
+/** Narrow an arbitrary string (e.g. a <select> value) to a SortBy. */
+export function asSortBy(value: string): SortBy {
+  switch (value) {
+    case 'name': return 'name';
+    case 'language': return 'language';
+    default: return 'date';
+  }
+}
+
 // Starred projects always come first; ties broken by the chosen mode.
 export function sortProjects(projects: Project[], sortBy: SortBy = 'date'): Project[] {
   return [...projects].sort((a, b) => {

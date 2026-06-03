@@ -5,7 +5,7 @@ import globals from 'globals';
 
 export default tseslint.config(
   {
-    ignores: ['out/', 'out-webview/', 'node_modules/', 'dev.html', '*.vsix'],
+    ignores: ['out/', 'out-webview/', 'node_modules/', 'dev.html', '*.vsix', '.claude/'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

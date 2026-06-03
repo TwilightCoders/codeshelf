@@ -8,21 +8,27 @@
  */
 import type { Shelf, Project, ScanDiff, WebviewToExt, ExtToWebview } from '../../shared/types';
 
-type MockWindow = Window & {
-  acquireVsCodeApi: () => {
-    postMessage: (msg: WebviewToExt) => void;
-    getState: () => unknown;
-    setState: (state: unknown) => void;
-  };
-  __mockHost: {
-    getShelves: () => Shelf[];
-    resetShelves: () => void;
-    injectShelves: (shelves: Shelf[]) => void;
-    addProject: (shelfName: string, project: Project) => void;
-  };
-};
+interface VsCodeApi {
+  postMessage: (msg: WebviewToExt) => void;
+  getState: () => unknown;
+  setState: (state: unknown) => void;
+}
 
-const mockWindow = window as unknown as MockWindow;
+/** Test hooks the puppeteer harness reaches via page.evaluate(). */
+export interface MockHostApi {
+  getShelves: () => Shelf[];
+  resetShelves: () => void;
+  injectShelves: (shelves: Shelf[]) => void;
+  addProject: (shelfName: string, project: Project) => void;
+}
+
+declare global {
+  interface Window {
+    acquireVsCodeApi?: () => VsCodeApi;
+    __mockHost?: MockHostApi;
+  }
+}
+
 const BOOKSET_THRESHOLD = 8;
 const DAY = 86_400_000;
 
@@ -33,7 +39,7 @@ function post(msg: ExtToWebview): void {
 }
 
 function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
+  return structuredClone(value);
 }
 
 function createMockShelves(): Shelf[] {
@@ -177,14 +183,14 @@ function handleMessage(msg: WebviewToExt): void {
   }
 }
 
-mockWindow.acquireVsCodeApi = () => ({
+window.acquireVsCodeApi = () => ({
   postMessage: handleMessage,
   getState: () => null,
   setState: (state: unknown) => console.log('[setState]', state),
 });
 
 // Test helpers, reachable from puppeteer page.evaluate().
-mockWindow.__mockHost = {
+window.__mockHost = {
   getShelves: () => clone(shelves),
   resetShelves: () => { shelves = createMockShelves(); },
   injectShelves: (newShelves: Shelf[]) => {
