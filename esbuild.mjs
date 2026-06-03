@@ -13,6 +13,8 @@ const ctx = await esbuild.context({
   platform: 'browser',
   target: 'es2020',
   sourcemap: true,
+  // Minify the real build; keep watch output readable for debugging.
+  minify: !watch,
   jsx: 'automatic',
   define: {
     'process.env.NODE_ENV': '"production"',
