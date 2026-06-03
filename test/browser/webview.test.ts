@@ -27,14 +27,12 @@ describe('initial render', () => {
 
   it('renders one card per visible (non-hidden) project in the mock data', async () => {
     const expected = await page.evaluate(() => {
-      const shelves = (window as unknown as {
-        __mockHost: { getShelves: () => Array<{ hidden?: boolean; items: Array<{ kind: string; projects?: unknown[] }> }> };
-      }).__mockHost.getShelves();
+      const shelves = window.__mockHost?.getShelves() ?? [];
       let n = 0;
       for (const shelf of shelves) {
         if (shelf.hidden) continue;
         for (const item of shelf.items) {
-          n += item.kind === 'project' ? 1 : (item.projects?.length ?? 0);
+          n += item.kind === 'project' ? 1 : item.projects.length;
         }
       }
       return n;
@@ -65,7 +63,8 @@ describe('initial render', () => {
   });
 
   it('renders sort dropdown with three options', async () => {
-    const options = await page.$$eval('.sort-select option', els => els.map(e => (e as HTMLOptionElement).value));
+    const options = await page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLOptionElement>('.sort-select option'), e => e.value));
     expect(options).toEqual(['date', 'name', 'language']);
   });
 
@@ -108,12 +107,12 @@ describe('search', () => {
     await new Promise(r => setTimeout(r, 200));
 
     await page.evaluate(() => {
-      const btn = document.querySelector('.search-clear') as HTMLElement;
+      const btn = document.querySelector<HTMLElement>('.search-clear');
       btn?.click();
     });
     await new Promise(r => setTimeout(r, 200));
 
-    const inputValue = await page.$eval('.search-input', el => (el as HTMLInputElement).value);
+    const inputValue = await page.evaluate(() => document.querySelector<HTMLInputElement>('.search-input')?.value);
     expect(inputValue).toBe('');
   });
 });
@@ -122,14 +121,14 @@ describe('search', () => {
 
 describe('sort', () => {
   it('defaults to "date" sort', async () => {
-    const value = await page.$eval('.sort-select', el => (el as HTMLSelectElement).value);
+    const value = await page.evaluate(() => document.querySelector<HTMLSelectElement>('.sort-select')?.value);
     expect(value).toBe('date');
   });
 
   it('can switch to A-Z sort', async () => {
     await page.select('.sort-select', 'name');
     await new Promise(r => setTimeout(r, 200));
-    const value = await page.$eval('.sort-select', el => (el as HTMLSelectElement).value);
+    const value = await page.evaluate(() => document.querySelector<HTMLSelectElement>('.sort-select')?.value);
     expect(value).toBe('name');
   });
 
@@ -137,14 +136,12 @@ describe('sort', () => {
     await page.select('.sort-select', 'name');
     await new Promise(r => setTimeout(r, 300));
 
-    const gemsShelf = await page.evaluateHandle(() => {
-      const shelves = document.querySelectorAll('.shelf-row');
-      return Array.from(shelves).find(s => s.querySelector('.shelf-row-title')?.textContent?.includes('Gems'));
+    const names = await page.evaluate(() => {
+      const shelf = Array.from(document.querySelectorAll('.shelf-row'))
+        .find(s => s.querySelector('.shelf-row-title')?.textContent?.includes('Gems'));
+      if (!shelf) return [];
+      return Array.from(shelf.querySelectorAll('.card-name'), e => e.textContent);
     });
-    const names = await page.evaluate(el => {
-      if (!el) return [];
-      return Array.from((el as Element).querySelectorAll('.card-name')).map(e => e.textContent);
-    }, gemsShelf);
 
     // glossary is starred → stays first. Rest should be alphabetical.
     if (names.length > 1) {
@@ -165,7 +162,7 @@ describe('card interactions (round-trip)', () => {
 
     // Click star on the first unstarred card
     await page.evaluate(() => {
-      const star = document.querySelector('.card-overlay .star-btn:not(.starred)') as HTMLElement;
+      const star = document.querySelector<HTMLElement>('.card-overlay .star-btn:not(.starred)');
       star?.click();
     });
     // Wait for mock host to respond with updated shelves
@@ -181,7 +178,7 @@ describe('card interactions (round-trip)', () => {
     expect(starredBefore).toBeGreaterThan(0);
 
     await page.evaluate(() => {
-      const star = document.querySelector('.card-overlay .star-btn.starred') as HTMLElement;
+      const star = document.querySelector<HTMLElement>('.card-overlay .star-btn.starred');
       star?.click();
     });
     await new Promise(r => setTimeout(r, 300));
@@ -195,7 +192,7 @@ describe('card interactions (round-trip)', () => {
 
     // Hide the first card
     await page.evaluate(() => {
-      const hide = document.querySelector('.project-card .hide-btn') as HTMLElement;
+      const hide = document.querySelector<HTMLElement>('.project-card .hide-btn');
       hide?.click();
     });
     await new Promise(r => setTimeout(r, 300));
@@ -210,7 +207,7 @@ describe('card interactions (round-trip)', () => {
 
     // Click hide on the first shelf's hide button
     await page.evaluate(() => {
-      const hide = document.querySelector('.shelf-row .shelf-actions .hide-btn') as HTMLElement;
+      const hide = document.querySelector<HTMLElement>('.shelf-row .shelf-actions .hide-btn');
       hide?.click();
     });
     await new Promise(r => setTimeout(r, 300));
@@ -224,7 +221,7 @@ describe('card interactions (round-trip)', () => {
   it('star persists after rescan', async () => {
     // Star a card
     await page.evaluate(() => {
-      const star = document.querySelector('.card-overlay .star-btn:not(.starred)') as HTMLElement;
+      const star = document.querySelector<HTMLElement>('.card-overlay .star-btn:not(.starred)');
       star?.click();
     });
     await new Promise(r => setTimeout(r, 300));
@@ -233,7 +230,7 @@ describe('card interactions (round-trip)', () => {
 
     // Trigger rescan
     await page.evaluate(() => {
-      const rescan = document.querySelector('button[title="Rescan"]') as HTMLElement;
+      const rescan = document.querySelector<HTMLElement>('button[title="Rescan"]');
       rescan?.click();
     });
     await new Promise(r => setTimeout(r, 300));
@@ -278,8 +275,8 @@ describe('modal interactions', () => {
   it('clicking shelf name opens shelf detail modal', async () => {
     await page.evaluate(() => {
       const title = document.querySelector('.shelf-row-title');
-      const nameSpan = title?.querySelectorAll('span')[1];
-      (nameSpan as HTMLElement)?.click();
+      const nameSpan = title?.querySelectorAll<HTMLElement>('span')[1];
+      nameSpan?.click();
     });
     await new Promise(r => setTimeout(r, 500));
 
@@ -290,8 +287,8 @@ describe('modal interactions', () => {
   it('shelf modal shows project cards', async () => {
     await page.evaluate(() => {
       const title = document.querySelector('.shelf-row-title');
-      const nameSpan = title?.querySelectorAll('span')[1];
-      (nameSpan as HTMLElement)?.click();
+      const nameSpan = title?.querySelectorAll<HTMLElement>('span')[1];
+      nameSpan?.click();
     });
     await new Promise(r => setTimeout(r, 500));
 
@@ -302,8 +299,8 @@ describe('modal interactions', () => {
   it('shelf modal has filter input', async () => {
     await page.evaluate(() => {
       const title = document.querySelector('.shelf-row-title');
-      const nameSpan = title?.querySelectorAll('span')[1];
-      (nameSpan as HTMLElement)?.click();
+      const nameSpan = title?.querySelectorAll<HTMLElement>('span')[1];
+      nameSpan?.click();
     });
     await new Promise(r => setTimeout(r, 500));
 
@@ -343,9 +340,8 @@ describe('stale fade', () => {
     await clockBtn!.click();
     await new Promise(r => setTimeout(r, 300));
 
-    const opacities = await page.$$eval('.project-card', els =>
-      els.map(e => parseFloat((e as HTMLElement).style.opacity))
-    );
+    const opacities = await page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLElement>('.project-card'), e => parseFloat(e.style.opacity)));
     expect(opacities.some(o => o < 1)).toBe(true);
   });
 });
@@ -358,7 +354,7 @@ describe('new project sparkle animation', () => {
 
     // Inject a new project via mock host
     await page.evaluate(() => {
-      (window as unknown as { __mockHost: { addProject: (shelf: string, project: unknown) => void } }).__mockHost.addProject('Gems', {
+      window.__mockHost?.addProject('Gems', {
         name: 'brand-new-gem',
         path: '/mock/code/Gems/brand-new-gem',
         markers: ['.git', '*.gemspec'],
@@ -379,7 +375,7 @@ describe('new project sparkle animation', () => {
 
   it('sparkle class is removed after timeout', async () => {
     await page.evaluate(() => {
-      (window as unknown as { __mockHost: { addProject: (shelf: string, project: unknown) => void } }).__mockHost.addProject('Gems', {
+      window.__mockHost?.addProject('Gems', {
         name: 'another-new',
         path: '/mock/code/Gems/another-new',
         markers: ['.git'],
@@ -398,7 +394,7 @@ describe('new project sparkle animation', () => {
 
   it('captures sparkle animation screenshot', async () => {
     await page.evaluate(() => {
-      (window as unknown as { __mockHost: { addProject: (shelf: string, project: unknown) => void } }).__mockHost.addProject('Apps', {
+      window.__mockHost?.addProject('Apps', {
         name: 'sparkle-test',
         path: '/mock/code/Apps/sparkle-test',
         markers: ['.git', '*.xcodeproj'],
@@ -432,7 +428,7 @@ describe('workspace open button', () => {
     page.on('console', msg => messages.push(msg.text()));
 
     await page.evaluate(() => {
-      const wsBtn = document.querySelector('.card-open-workspace') as HTMLElement;
+      const wsBtn = document.querySelector<HTMLElement>('.card-open-workspace');
       wsBtn?.click();
     });
     await new Promise(r => setTimeout(r, 200));
@@ -447,7 +443,7 @@ describe('workspace open button', () => {
 
     await page.evaluate(() => {
       const group = document.querySelector('.card-open-group.has-workspace');
-      const folderBtn = group?.querySelector('.card-open-btn:not(.card-open-workspace)') as HTMLElement;
+      const folderBtn = group?.querySelector<HTMLElement>('.card-open-btn:not(.card-open-workspace)');
       folderBtn?.click();
     });
     await new Promise(r => setTimeout(r, 200));
@@ -547,8 +543,8 @@ describe('visual oversight', () => {
   it('captures shelf modal', async () => {
     await page.evaluate(() => {
       const title = document.querySelector('.shelf-row-title');
-      const nameSpan = title?.querySelectorAll('span')[1];
-      (nameSpan as HTMLElement)?.click();
+      const nameSpan = title?.querySelectorAll<HTMLElement>('span')[1];
+      nameSpan?.click();
     });
     await new Promise(r => setTimeout(r, 500));
     const path = await screenshot(page, '05-shelf-modal');
@@ -564,12 +560,9 @@ describe('visual oversight', () => {
 
   it('captures workspace button group on hover', async () => {
     // Hover over the startpage card (has workspaceFile)
-    const wsCard = await page.evaluateHandle(() => {
-      const cards = document.querySelectorAll('.project-card');
-      return Array.from(cards).find(c => c.getAttribute('title')?.includes('startpage'));
-    });
+    const wsCard = await page.$('.project-card[title*="startpage"]');
     if (wsCard) {
-      await (wsCard as unknown as import('puppeteer-core').ElementHandle).hover();
+      await wsCard.hover();
       await new Promise(r => setTimeout(r, 300));
     }
     const path = await screenshot(page, '09-workspace-button-group');
@@ -579,14 +572,14 @@ describe('visual oversight', () => {
   it('captures state after starring + hiding', async () => {
     // Star a card
     await page.evaluate(() => {
-      const star = document.querySelector('.card-overlay .star-btn:not(.starred)') as HTMLElement;
+      const star = document.querySelector<HTMLElement>('.card-overlay .star-btn:not(.starred)');
       star?.click();
     });
     await new Promise(r => setTimeout(r, 300));
 
     // Hide a card
     await page.evaluate(() => {
-      const hide = document.querySelector('.project-card .hide-btn') as HTMLElement;
+      const hide = document.querySelector<HTMLElement>('.project-card .hide-btn');
       hide?.click();
     });
     await new Promise(r => setTimeout(r, 300));
