@@ -28,7 +28,9 @@ export function ProjectCard({ project, rootPath, forging, staleFade, isNew, onCl
 
   return (
     <div className={`project-card ${hasPoster ? 'has-poster' : ''} ${forging ? 'forging' : ''} ${isNew ? 'new-project' : ''}`}
-      title={project.path} onClick={onClick} style={{ opacity, transition: 'opacity 0.3s ease' }}>
+      title={project.path} onClick={onClick} role="button" tabIndex={0} aria-label={`Open ${project.name}`}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+      style={{ opacity, transition: 'opacity 0.3s ease' }}>
       <div className={`card-poster-flip ${hasPoster ? 'flipped' : ''}`}>
         <div className="card-poster-face card-poster-fallback" style={{ backgroundColor: bgColor }}>
           {badge && <span className="card-badge">{badge}</span>}

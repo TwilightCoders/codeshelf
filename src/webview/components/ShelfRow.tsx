@@ -43,7 +43,10 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy,
   return (
     <section className={`shelf-row ${collapsed ? 'collapsed' : ''} ${isCompact ? 'shelf-compact' : ''} ${shelf.starred ? 'starred-shelf' : ''}`}>
       <h3 className="shelf-row-title">
-        <span className={`collapse-arrow ${collapsed ? 'collapsed' : ''}`} onClick={() => setCollapsed(!collapsed)}>&#9656;</span>
+        <span className={`collapse-arrow ${collapsed ? 'collapsed' : ''}`} role="button" tabIndex={0}
+          aria-expanded={!collapsed} aria-label={collapsed ? 'Expand shelf' : 'Collapse shelf'}
+          onClick={() => setCollapsed(!collapsed)}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCollapsed(!collapsed); } }}>&#9656;</span>
         <span onClick={() => onShelfClick(shelf)} style={{ cursor: 'pointer' }}>{shelf.name}</span>
         <span className="shelf-actions">
           <button className={`action-btn star-btn ${shelf.starred ? 'starred' : ''}`} title="Star" onClick={e => { e.stopPropagation(); postMsg({ type: 'item:star', path: shelf.path, rootPath: shelf.rootPath, starred: !shelf.starred }); }}>

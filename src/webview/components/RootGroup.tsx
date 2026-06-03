@@ -27,7 +27,10 @@ export function RootGroup({ label, shelves, hiddenShelves, query, booksetThresho
   return (
     <div className={`root-group ${collapsed ? 'collapsed' : ''}`}>
       <h2 className="root-header">
-        <span className={`collapse-arrow ${collapsed ? 'collapsed' : ''}`} onClick={() => setCollapsed(!collapsed)}>&#9656;</span>
+        <span className={`collapse-arrow ${collapsed ? 'collapsed' : ''}`} role="button" tabIndex={0}
+          aria-expanded={!collapsed} aria-label={collapsed ? 'Expand' : 'Collapse'}
+          onClick={() => setCollapsed(!collapsed)}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCollapsed(!collapsed); } }}>&#9656;</span>
         <span onClick={() => setCollapsed(!collapsed)}>{label}</span>
         {hiddenShelves.length > 0 && (
           <span className="hidden-pills" onClick={e => e.stopPropagation()}>

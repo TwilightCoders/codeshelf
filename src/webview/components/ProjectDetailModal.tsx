@@ -33,7 +33,7 @@ export function ProjectDetailModal({ project, forging, onClose }: Props) {
   }, []);
 
   return (
-    <div className="detail-modal" style={{ display: 'flex' }}>
+    <div className="detail-modal" role="dialog" aria-modal="true" aria-label={`${project.name} details`} style={{ display: 'flex' }}>
       <div className="detail-backdrop" onClick={onClose} />
       <div className="detail-panel">
         <div className={`detail-poster ${forging ? 'forging' : ''}`}>

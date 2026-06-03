@@ -16,7 +16,7 @@ export function ShelfDetailModal({ shelf, onClose, onProjectClick, forgingPaths 
   const projects = sortProjects(collectProjects(shelf.items));
 
   return (
-    <div className="detail-modal" style={{ display: 'flex' }}>
+    <div className="detail-modal" role="dialog" aria-modal="true" aria-label={`${shelf.name} shelf`} style={{ display: 'flex' }}>
       <div className="detail-backdrop" onClick={onClose} />
       <div className="shelf-modal-panel">
         <div className="shelf-modal-header">
