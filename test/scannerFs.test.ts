@@ -57,6 +57,14 @@ beforeAll(async () => {
   await fs.promises.writeFile(path.join(root1, 'cortex', '.claude', 'CONTEXT.md'),
     '# Cortex\n\nA spiking neural network simulator written in C++.\n');
 
+  // A project whose key term lives only in SOURCE (not docs) + a .gitignore'd
+  // file that must NOT be indexed.
+  await fs.promises.mkdir(path.join(root1, 'synapse'), { recursive: true });
+  await fs.promises.writeFile(path.join(root1, 'synapse', 'CMakeLists.txt'), 'project(synapse)\n');
+  await fs.promises.writeFile(path.join(root1, 'synapse', 'brain.cpp'), '// a spiking neural network\nint axon() { return 0; }\n');
+  await fs.promises.writeFile(path.join(root1, 'synapse', '.gitignore'), 'secret.txt\nbuild/\n');
+  await fs.promises.writeFile(path.join(root1, 'synapse', 'secret.txt'), 'confidentialword topsecret');
+
   // root2: a multi-folder .code-workspace → bookset shelf "WS"
   const ws = path.join(root2, 'WS');
   await mkproj(path.join(ws, 'frontend'), 'package.json');
@@ -160,6 +168,17 @@ describe('scanRoots (filesystem)', () => {
     expect(p).toBeDefined();
     // No README, no indexable manifest — corpus comes from .claude/CONTEXT.md.
     expect((p!.searchText ?? '').toLowerCase()).toContain('neural');
+  });
+
+  it('indexes project source (adjectives kept) and honors .gitignore', async () => {
+    const shelves = await scanRoots({ [root1]: {} }, 3);
+    const all = shelves.flatMap(s => s.items).flatMap(i => i.kind === 'project' ? [i.project] : i.projects);
+    const p = all.find(x => x.name === 'synapse');
+    expect(p).toBeDefined();
+    const corpus = (p!.searchText ?? '').toLowerCase();
+    expect(corpus).toContain('neural');             // adjective, from source, not stripped
+    expect(corpus).toContain('axon');               // OOV identifier from source
+    expect(corpus).not.toContain('confidentialword'); // secret.txt is .gitignore'd
   });
 
   // ── Umbrella markers → super-projects ──

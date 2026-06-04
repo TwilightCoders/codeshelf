@@ -1,5 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import ignore from 'ignore';
+import { SKIP_DIRS } from '../shared/constants';
+import { NON_NOUN_WORDS } from './nonNouns.generated';
 
 // Builds the per-project search corpus: a capped, cleaned blob of the README
 // excerpt plus a one-line "blurb" pulled from the project's package manifest.
@@ -69,25 +72,137 @@ export function assembleSearchText(blurb: string, docText: string): string {
   return corpus.slice(0, TOTAL_CAP).trim();
 }
 
+// ── Local word-index over the project's own files ──
+
+const FINAL_CAP = 6000;
+const VOCAB_CAP = 300;          // max distinct residue words kept per project
+const WORD_SPLIT = /[^A-Za-z0-9]+/;
+
+// Texty file extensions worth tokenizing (source + prose + config); binaries,
+// lockfiles, and minified bundles are excluded.
+const TEXT_EXT = new Set([
+  'md', 'markdown', 'mdown', 'txt', 'rst', 'adoc',
+  'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'py', 'rb', 'go', 'rs', 'java', 'kt', 'kts',
+  'swift', 'c', 'cc', 'cpp', 'cxx', 'h', 'hh', 'hpp', 'cs', 'php', 'lua', 'ex', 'exs',
+  'erl', 'dart', 'vue', 'svelte', 'scala', 'clj', 'sh', 'bash', 'zsh', 'fish', 'sql',
+  'json', 'jsonc', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf', 'html', 'htm', 'xml',
+  'css', 'scss', 'sass', 'less', 'styl', 'gradle', 'groovy', 'r', 'jl', 'm', 'mm',
+  'pl', 'pm', 'tf', 'proto', 'graphql', 'gql',
+]);
+const SKIP_FILE_RE = /\.min\.(js|css)$|^(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|composer\.lock|Cargo\.lock|poetry\.lock|Gemfile\.lock)$|\.map$/i;
+
+const MAX_FILES = 50;            // bound the walk: files read per project
+const MAX_FILE_BYTES = 64 * 1024;
+const MAX_TOTAL_BYTES = 256 * 1024;
+
+let _denylist: Set<string> | undefined;
+function denylist(): Set<string> {
+  if (!_denylist) _denylist = new Set(NON_NOUN_WORDS.split('\n'));
+  return _denylist;
+}
+
+function isTexty(name: string): boolean {
+  if (SKIP_FILE_RE.test(name)) return false;
+  const dot = name.lastIndexOf('.');
+  return dot > 0 && TEXT_EXT.has(name.slice(dot + 1).toLowerCase());
+}
+
 /**
- * Read a project's docs + manifest and return its search corpus (undefined if
- * empty). Doc sources: a top-level README, plus the project's own
- * `.claude/CONTEXT.md` — the curated description many projects keep instead of
- * (or alongside) a README, so README-less projects (Xcode/C++/etc.) still index.
- * `entryNames` may be supplied (the scanner already has them); otherwise the
- * directory is read here.
+ * Tokenize text and return its distinct "content vocabulary": camelCase/snake
+ * split, lowercased, with non-nouns (verbs/adverbs/function words via the
+ * denylist), pure-numbers, and too-short/long tokens removed. What survives is
+ * nouns + adjectives + out-of-vocabulary custom words. Pure + capped.
+ */
+export function extractVocabulary(text: string, deny: Set<string>, cap = VOCAB_CAP): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of text.split(WORD_SPLIT)) {
+    if (!raw) continue;
+    const split = raw
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')          // camelCase → camel Case
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');      // HTTPServer → HTTP Server
+    for (const piece of split.split(' ')) {
+      const w = piece.toLowerCase();
+      if (w.length < 3 || w.length > 24) continue;
+      if (/^\d+$/.test(w)) continue;                    // pure number
+      if (!/[a-z]/.test(w)) continue;                   // must contain a letter
+      if (deny.has(w) || seen.has(w)) continue;
+      seen.add(w);
+      out.push(w);
+      if (out.length >= cap) return out;
+    }
+  }
+  return out;
+}
+
+/**
+ * Concatenate a bounded sample of the project's own text files, honoring
+ * SKIP_DIRS (hard floor) AND the project's `.gitignore` (via the `ignore`
+ * package — correct negation/anchoring/globstar handling). Dotfiles/dirs are
+ * skipped (`.git`, `.claude` etc.; `.claude/CONTEXT.md` is read elsewhere).
+ */
+export async function gatherProjectText(dir: string, rootEntryNames: string[]): Promise<string> {
+  const ig = ignore();
+  if (rootEntryNames.includes('.gitignore')) {
+    const gi = await fs.promises.readFile(path.join(dir, '.gitignore'), 'utf-8').catch(() => '');
+    if (gi) ig.add(gi);
+  }
+  const chunks: string[] = [];
+  let files = 0;
+  let bytes = 0;
+  const walk = async (absDir: string): Promise<void> => {
+    if (files >= MAX_FILES || bytes >= MAX_TOTAL_BYTES) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(absDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (files >= MAX_FILES || bytes >= MAX_TOTAL_BYTES) return;
+      if (e.name.startsWith('.') || SKIP_DIRS.has(e.name)) continue;
+      const abs = path.join(absDir, e.name);
+      const rel = path.relative(dir, abs);
+      if (rel && ig.ignores(rel)) continue;
+      if (e.isDirectory()) {
+        await walk(abs);
+      } else if (e.isFile() && isTexty(e.name)) {
+        const text = await fs.promises.readFile(abs, 'utf-8').catch(() => '');
+        if (!text) continue;
+        const slice = text.length > MAX_FILE_BYTES ? text.slice(0, MAX_FILE_BYTES) : text;
+        chunks.push(slice);
+        files += 1;
+        bytes += slice.length;
+      }
+    }
+  };
+  await walk(dir);
+  return chunks.join('\n');
+}
+
+/**
+ * Read a project's docs + manifest + own source files and return its search
+ * corpus (undefined if empty). Sources: a top-level README, the project's own
+ * `.claude/CONTEXT.md`, a manifest description/keywords blurb (kept verbatim),
+ * and the noun+adjective+custom-word vocabulary extracted from its text files
+ * (gitignore-respecting). `entryNames` may be supplied (the scanner already has
+ * them); otherwise the directory is read here.
  */
 export async function buildSearchText(dir: string, entryNames?: string[]): Promise<string | undefined> {
   const names = entryNames ?? await fs.promises.readdir(dir).catch((): string[] => []);
   const readmeName = names.find(e => README_RE.test(e));
   const manifestName = pickManifest(names);
   const read = (...rel: string[]) => fs.promises.readFile(path.join(dir, ...rel), 'utf-8').catch(() => '');
-  const [readme, context, manifest] = await Promise.all([
+  const [readme, context, manifest, fileText] = await Promise.all([
     readmeName ? read(readmeName) : Promise.resolve(''),
     names.includes('.claude') ? read('.claude', 'CONTEXT.md') : Promise.resolve(''),
     manifestName ? read(manifestName) : Promise.resolve(''),
+    gatherProjectText(dir, names),
   ]);
   const blurb = manifestName ? extractManifestBlurb(manifestName, manifest) : '';
   const docText = [readme, context].filter(Boolean).join('\n\n');
-  return assembleSearchText(blurb, docText) || undefined;
+  const base = assembleSearchText(blurb, docText);
+  const vocab = extractVocabulary(fileText, denylist()).join(' ');
+  const corpus = [base, vocab].filter(Boolean).join(' — ').slice(0, FINAL_CAP);
+  return corpus || undefined;
 }

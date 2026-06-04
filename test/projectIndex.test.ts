@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickManifest, extractManifestBlurb, cleanDocText, assembleSearchText } from '../src/services/projectIndex';
+import { pickManifest, extractManifestBlurb, cleanDocText, assembleSearchText, extractVocabulary } from '../src/services/projectIndex';
 
 describe('pickManifest', () => {
   it('prefers package.json over other manifests', () => {
@@ -59,5 +59,32 @@ describe('assembleSearchText', () => {
   });
   it('returns empty when there is nothing to index', () => {
     expect(assembleSearchText('', '')).toBe('');
+  });
+});
+
+describe('extractVocabulary', () => {
+  const none = new Set<string>();
+
+  it('splits camelCase/PascalCase and lowercases', () => {
+    expect(extractVocabulary('MemoryNeuron axonCount HTTPServer', none))
+      .toEqual(expect.arrayContaining(['memory', 'neuron', 'axon', 'count', 'http', 'server']));
+  });
+
+  it('subtracts the denylist (non-nouns) but keeps the rest', () => {
+    const deny = new Set(['the', 'running', 'quickly']);
+    expect(extractVocabulary('the neural network running quickly', deny))
+      .toEqual(['neural', 'network']);
+  });
+
+  it('drops short tokens and pure numbers', () => {
+    expect(extractVocabulary('a ab abc 404 notfound', none)).toEqual(['abc', 'notfound']);
+  });
+
+  it('dedupes', () => {
+    expect(extractVocabulary('cat cat dog cat', none)).toEqual(['cat', 'dog']);
+  });
+
+  it('respects the cap', () => {
+    expect(extractVocabulary('alpha bravo charlie delta echo', none, 2)).toHaveLength(2);
   });
 });
