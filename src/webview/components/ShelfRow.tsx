@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Shelf } from '../../shared/types';
-import { postMsg, collectProjects, flattenBooksets, sortProjects } from './helpers';
+import { postMsg, collectProjects, flattenBooksets, sortProjects, projectMatchesQuery } from './helpers';
 import type { SortBy } from './pure';
 import { ProjectCard } from './ProjectCard';
 
@@ -32,7 +32,7 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy,
   const q = query || inlineFilter.toLowerCase().trim();
   if (q) {
     const shelfMatch = shelf.name.toLowerCase().includes(q);
-    if (!shelfMatch) projects = projects.filter(p => p.name.toLowerCase().includes(q));
+    if (!shelfMatch) projects = projects.filter(p => projectMatchesQuery(p, q));
   }
   if (projects.length === 0) return null;
 

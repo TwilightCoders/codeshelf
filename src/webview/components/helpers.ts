@@ -5,6 +5,7 @@ export {
   LANGUAGE_ICONS, LANGUAGE_COLORS,
   hashColor, timeAgo,
   collectProjects, flattenBooksets, sortProjects,
+  projectMatchesQuery, matchSnippet,
 } from './pure';
 
 // ── VS Code API ──

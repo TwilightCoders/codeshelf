@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   hashColor, timeAgo,
   collectProjects, flattenBooksets, sortProjects,
+  projectMatchesQuery, matchSnippet,
 } from '../src/webview/components/pure';
 import type { ShelfItem, Project } from '../src/shared/types';
 import { projectOf } from './support';
@@ -58,6 +59,44 @@ describe('timeAgo', () => {
 
   it('returns years', () => {
     expect(timeAgo(Date.now() - 400 * 86_400_000)).toBe('1y ago');
+  });
+});
+
+// ── projectMatchesQuery ──
+
+describe('projectMatchesQuery', () => {
+  it('matches on name', () => {
+    expect(projectMatchesQuery(makeProject('helix-tunnel'), 'helix')).toBe(true);
+  });
+  it('matches on the indexed corpus when the name does not', () => {
+    const p = makeProject('ht', { searchText: 'QUIC reverse tunnel, esperanto-friendly' });
+    expect(projectMatchesQuery(p, 'esperanto')).toBe(true);
+    expect(projectMatchesQuery(p, 'quic')).toBe(true);
+  });
+  it('returns false when neither name nor corpus match', () => {
+    expect(projectMatchesQuery(makeProject('ht', { searchText: 'a tunnel' }), 'rails')).toBe(false);
+  });
+  it('matches everything for an empty query', () => {
+    expect(projectMatchesQuery(makeProject('x'), '')).toBe(true);
+  });
+});
+
+// ── matchSnippet ──
+
+describe('matchSnippet', () => {
+  it('returns an excerpt around the match with trailing ellipsis', () => {
+    const text = 'Low-latency reverse tunnel built on QUIC multiplexing across many connections and more text here';
+    const s = matchSnippet(text, 'multiplexing', 10)!;
+    expect(s).toContain('multiplexing');
+    expect(s.startsWith('…')).toBe(true);
+    expect(s.endsWith('…')).toBe(true);
+  });
+  it('is case-insensitive', () => {
+    expect(matchSnippet('The QUIC protocol', 'quic')).toContain('QUIC');
+  });
+  it('returns undefined when there is no match or no text', () => {
+    expect(matchSnippet('hello world', 'xyz')).toBeUndefined();
+    expect(matchSnippet(undefined, 'x')).toBeUndefined();
   });
 });
 

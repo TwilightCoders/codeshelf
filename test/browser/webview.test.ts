@@ -520,6 +520,31 @@ describe('command palette', () => {
     await new Promise(r => setTimeout(r, 150));
     expect(messages.some(m => m.includes('project:open') && m.includes('radio-client'))).toBe(true);
   });
+
+  it('matches on indexed doc content and shows a snippet', async () => {
+    await openPalette();
+    // "esperanto" appears only in glossary's searchText corpus, not in any name
+    await page.type('.cmdk-input', 'esperanto');
+    await new Promise(r => setTimeout(r, 200));
+    const names = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.cmdk-item .cmdk-name'), e => e.textContent));
+    expect(names).toContain('glossary');
+    const snippet = await page.$eval('.cmdk-snippet', el => el.textContent ?? '').catch(() => '');
+    expect(snippet.toLowerCase()).toContain('esperanto');
+  });
+});
+
+// ── Content search in the header filter ──
+
+describe('header content search', () => {
+  it('filters to a project by its indexed doc content (not just name)', async () => {
+    await page.type('.search-input', 'esperanto');
+    await new Promise(r => setTimeout(r, 300));
+    const names = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.card-name'), e => e.textContent));
+    expect(names).toContain('glossary');           // matched via corpus
+    expect(names).not.toContain('radio-client');       // no esperanto in its corpus/name
+  });
 });
 
 // ── Poster Generation (Mock) ──

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, type KeyboardEvent } from 'react';
 import type { Project } from '../../shared/types';
-import { postMsg, LANGUAGE_ICONS } from './helpers';
+import { postMsg, LANGUAGE_ICONS, projectMatchesQuery, matchSnippet } from './helpers';
 
 /** A project plus the root/shelf context it was found under. */
 export interface ProjectEntry {
@@ -31,13 +31,13 @@ export function CommandPalette({ projects, onClose }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  const q = query.toLowerCase().trim();
   const results = useMemo(() => {
-    const q = query.toLowerCase().trim();
     if (!q) return projects.slice(0, MAX_RESULTS);
     return projects
-      .filter(e => e.project.name.toLowerCase().includes(q) || e.project.path.toLowerCase().includes(q))
+      .filter(e => e.project.path.toLowerCase().includes(q) || projectMatchesQuery(e.project, q))
       .slice(0, MAX_RESULTS);
-  }, [projects, query]);
+  }, [projects, q]);
 
   // Selection resets to the top whenever the query changes.
   useEffect(() => { setSelected(0); }, [query]);
@@ -72,18 +72,27 @@ export function CommandPalette({ projects, onClose }: Props) {
         </div>
         <div className="cmdk-results" ref={listRef}>
           {results.length === 0 && <div className="cmdk-empty">No projects match “{query}”.</div>}
-          {results.map((entry, i) => (
-            <div key={entry.project.path}
-              className={`cmdk-item ${i === selected ? 'selected' : ''}`}
-              onClick={() => openProject(entry)}
-              onMouseMove={() => setSelected(i)}>
-              <span className="cmdk-badge">{badgeFor(entry.project.primaryLanguage)}</span>
-              <span className="cmdk-name">{entry.project.name}</span>
-              {entry.project.gitBranch && <span className="cmdk-branch"><i className="codicon codicon-git-branch" /> {entry.project.gitBranch}</span>}
-              <span className="cmdk-context">{entry.rootLabel} / {entry.shelfName}</span>
-              {entry.project.workspaceFile && <i className="codicon codicon-multiple-windows" title="Opens workspace" />}
-            </div>
-          ))}
+          {results.map((entry, i) => {
+            // Show a corpus snippet only when the match is in the docs, not the name.
+            const snippet = q && !entry.project.name.toLowerCase().includes(q)
+              ? matchSnippet(entry.project.searchText, q)
+              : undefined;
+            return (
+              <div key={entry.project.path}
+                className={`cmdk-item ${i === selected ? 'selected' : ''}`}
+                onClick={() => openProject(entry)}
+                onMouseMove={() => setSelected(i)}>
+                <div className="cmdk-row-main">
+                  <span className="cmdk-badge">{badgeFor(entry.project.primaryLanguage)}</span>
+                  <span className="cmdk-name">{entry.project.name}</span>
+                  {entry.project.gitBranch && <span className="cmdk-branch"><i className="codicon codicon-git-branch" /> {entry.project.gitBranch}</span>}
+                  <span className="cmdk-context">{entry.rootLabel} / {entry.shelfName}</span>
+                  {entry.project.workspaceFile && <i className="codicon codicon-multiple-windows" title="Opens workspace" />}
+                </div>
+                {snippet && <div className="cmdk-snippet">{snippet}</div>}
+              </div>
+            );
+          })}
         </div>
         <div className="cmdk-footer">
           <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>

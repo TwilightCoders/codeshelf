@@ -37,6 +37,33 @@ export function timeAgo(ms: number): string {
   return `${Math.floor(months / 12)}y ago`;
 }
 
+/**
+ * Does a project match the query, by name or by its indexed doc corpus?
+ * `q` is expected already lowercased + trimmed (callers do this once).
+ */
+export function projectMatchesQuery(p: Project, q: string): boolean {
+  if (!q) return true;
+  if (p.name.toLowerCase().includes(q)) return true;
+  return !!p.searchText && p.searchText.toLowerCase().includes(q);
+}
+
+/**
+ * A short readable excerpt of `text` around the first case-insensitive match of
+ * `q`, with ellipses, or undefined if there's no match. Used to show *why* a
+ * content search hit.
+ */
+export function matchSnippet(text: string | undefined, q: string, radius = 40): string | undefined {
+  if (!text || !q) return undefined;
+  const i = text.toLowerCase().indexOf(q.toLowerCase());
+  if (i < 0) return undefined;
+  const start = Math.max(0, i - radius);
+  const end = Math.min(text.length, i + q.length + radius);
+  let s = text.slice(start, end).replace(/\s+/g, ' ').trim();
+  if (start > 0) s = '…' + s;
+  if (end < text.length) s = s + '…';
+  return s;
+}
+
 export function collectProjects(items: ShelfItem[]): Project[] {
   const projects: Project[] = [];
   for (const item of items) {

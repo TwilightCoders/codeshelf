@@ -1652,15 +1652,31 @@ body.modal-open {
 
 .cmdk-item {
   display: flex;
-  align-items: center;
-  gap: var(--sp-5);
+  flex-direction: column;
+  gap: 2px;
   padding: var(--sp-4) var(--sp-5);
   border-radius: var(--r-md);
   cursor: pointer;
 }
 
+.cmdk-row-main {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+}
+
 .cmdk-item.selected {
   background: var(--vscode-list-hoverBackground, var(--surface-2));
+}
+
+/* Corpus match excerpt — aligned past the badge, single muted line. */
+.cmdk-snippet {
+  padding-left: calc(26px + var(--sp-5));
+  font-size: var(--fs-xs);
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cmdk-badge {
