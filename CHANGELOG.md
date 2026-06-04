@@ -7,12 +7,17 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
-- **Content search** — each project is indexed into a small search corpus (a
-  cleaned README excerpt, the project's `.claude/CONTEXT.md` if present, and a
-  description/keywords blurb from its package manifest:
-  `package.json`/`composer.json`/`Cargo.toml`/`pyproject.toml`/gemspec). Indexing
-  `.claude/CONTEXT.md` means README-less projects (Xcode/C++/etc.) still get a
-  searchable corpus.
+- **Content search** — each project is indexed into a small search corpus matched
+  by both the header filter and the Cmd/Ctrl+K palette (which shows a snippet of
+  the hit). Sources: a cleaned README excerpt, the project's `.claude/CONTEXT.md`,
+  a description/keywords blurb from its package manifest
+  (`package.json`/`composer.json`/`Cargo.toml`/`pyproject.toml`/gemspec), **and the
+  vocabulary of its own source files**. Source tokens are camel/snake-split and
+  reduced to nouns + adjectives + out-of-vocabulary "custom" terms by subtracting
+  a WordNet-derived "never-a-noun" denylist (verbs/adverbs/function words); the
+  file walk honors `SKIP_DIRS` + each project's `.gitignore` and is bounded
+  (texty extensions only, 50 files / 256KB per project). README-less projects
+  (Xcode/C++/etc.) still index via their source + `.claude/CONTEXT.md`.
   Both the header filter and the Cmd/Ctrl+K palette now match that corpus, not
   just the project name; Cmd+K shows a snippet of the matching text. Indexing
   happens during the scan (no extra `readdir`; one bounded `readFile` per
