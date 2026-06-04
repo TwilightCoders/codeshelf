@@ -18,6 +18,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   file walk honors `SKIP_DIRS` + each project's `.gitignore` and is bounded
   (texty extensions only, 50 files / 256KB per project). README-less projects
   (Xcode/C++/etc.) still index via their source + `.claude/CONTEXT.md`.
+- **Auto keyword tags** — each project surfaces a few keyword chips chosen by
+  TF-IDF over its indexed vocabulary (term frequency ÷ how many projects contain
+  the term), so distinctive words win and ubiquitous ones (`def`/`data`/`end`)
+  drop out. Computed in one pass after the scan and sharpens as the library grows.
   Both the header filter and the Cmd/Ctrl+K palette now match that corpus, not
   just the project name; Cmd+K shows a snippet of the matching text. Indexing
   happens during the scan (no extra `readdir`; one bounded `readFile` per
