@@ -6,6 +6,7 @@ tsconfig*.json
 .Codex/**
 .claude/**
 test/**
+scripts/**
 out-webview/dev/**
 dev.html
 eslint.config.mjs
@@ -13,6 +14,9 @@ eslint.config.mjs
 vitest*.config.ts
 esbuild.mjs
 
-# Drop all of node_modules EXCEPT the codicons font/css the webview loads at runtime
+# Drop all of node_modules EXCEPT runtime assets/deps the host actually loads:
+# the codicons font/css (webview <link>) and `ignore` (host requires it at runtime;
+# webview deps like react are bundled by esbuild so they don't need to ship).
 node_modules/**
 !node_modules/@vscode/codicons/**
+!node_modules/ignore/**
