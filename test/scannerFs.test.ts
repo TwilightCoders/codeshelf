@@ -43,6 +43,13 @@ beforeAll(async () => {
   // Tiny has exactly one child project → single-child collapse → absorbed loose
   await mkproj(path.join(root1, 'Tiny', 'only'), 'package.json');
 
+  // A loose project with a README + manifest description, for search indexing.
+  await fs.promises.mkdir(path.join(root1, 'helix-tunnel'), { recursive: true });
+  await fs.promises.writeFile(path.join(root1, 'helix-tunnel', 'package.json'),
+    JSON.stringify({ name: 'helix-tunnel', description: 'QUIC reverse tunnel', keywords: ['multiplexing'] }));
+  await fs.promises.writeFile(path.join(root1, 'helix-tunnel', 'README.md'),
+    '# Helix Tunnel\n\nLow-latency reverse tunnel built on QUIC. Esperanto-friendly.\n');
+
   // root2: a multi-folder .code-workspace → bookset shelf "WS"
   const ws = path.join(root2, 'WS');
   await mkproj(path.join(ws, 'frontend'), 'package.json');
@@ -126,6 +133,17 @@ describe('scanRoots (filesystem)', () => {
   it('returns no shelves for an unreadable root', async () => {
     const shelves = await scanRoots({ [path.join(tmp, 'does-not-exist')]: {} }, 3);
     expect(shelves).toEqual([]);
+  });
+
+  it('indexes README + manifest blurb into project.searchText', async () => {
+    const shelves = await scanRoots({ [root1]: {} }, 3);
+    const all = shelves.flatMap(s => s.items).flatMap(i => i.kind === 'project' ? [i.project] : i.projects);
+    const p = all.find(x => x.name === 'helix-tunnel');
+    expect(p).toBeDefined();
+    const corpus = (p!.searchText ?? '').toLowerCase();
+    expect(corpus).toContain('quic');         // manifest description + README
+    expect(corpus).toContain('multiplexing'); // manifest keyword
+    expect(corpus).toContain('esperanto');    // README body
   });
 
   // ── Umbrella markers → super-projects ──

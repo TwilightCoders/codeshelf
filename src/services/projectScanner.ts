@@ -7,6 +7,7 @@ import {
 import { Project, Shelf, ShelfItem, ProjectItem, RootsConfig, RootConfig, ShelfMeta, ProjectMeta } from '../shared/types';
 import { getBranch } from './gitInfo';
 import { parseWorkspaceFile, WorkspaceInfo } from './workspaceFile';
+import { buildSearchText } from './projectIndex';
 
 // Cap on how many sibling directories are probed at once. Keeps a very wide
 // root from spawning hundreds of concurrent fs operations / open descriptors.
@@ -103,16 +104,19 @@ function resolveShelfMeta(shelfPath: string, rootMeta?: RootConfig): ShelfMeta |
 
 // `wsInfo` may be supplied by the caller to avoid re-parsing the workspace
 // file (the scanner already parses it once per directory). Pass `null` to skip
-// the lookup entirely; leave `undefined` to parse on demand.
+// the lookup entirely; leave `undefined` to parse on demand. `entryNames`, if
+// supplied, lets the doc indexer avoid a redundant readdir.
 async function buildProject(
   dir: string,
   markers: string[],
   projectMeta?: ProjectMeta,
   wsInfo?: WorkspaceInfo | null,
+  entryNames?: string[],
 ): Promise<Project> {
-  const [stat, ws] = await Promise.all([
+  const [stat, ws, searchText] = await Promise.all([
     fs.promises.stat(dir),
     wsInfo === undefined ? parseWorkspaceFile(dir) : Promise.resolve(wsInfo),
+    buildSearchText(dir, entryNames),
   ]);
   const gitBranch = markers.includes('.git') ? await getBranch(dir) : undefined;
 
@@ -127,6 +131,7 @@ async function buildProject(
     description: projectMeta?.description,
     workspaceFile: ws?.filePath,
     starred: projectMeta?.starred,
+    searchText,
   };
 }
 
@@ -219,7 +224,7 @@ async function scanDirectory(
       // single "super-project" card (do NOT recurse into its sub-projects).
       const pMeta = resolveProjectMeta(subdir, shelfMeta);
       if (!pMeta?.hidden) {
-        const project = await buildProject(subdir, markers.length > 0 ? markers : umbrella, pMeta, wsInfo);
+        const project = await buildProject(subdir, markers.length > 0 ? markers : umbrella, pMeta, wsInfo, entryNames);
         // Apply collapsed name prefix if we're inside a single-child chain
         if (namePrefix) {
           project.name = `${namePrefix}/${project.name}`;
@@ -394,7 +399,7 @@ export async function scanRoots(
       if (topMarkers.length > 0 || topUmbrella.length > 0) {
         const pMeta = resolveProjectMeta(topDir.path, shelfMeta);
         if (!pMeta?.hidden) {
-          const project = await buildProject(topDir.path, topMarkers.length > 0 ? topMarkers : topUmbrella, pMeta, topWsInfo);
+          const project = await buildProject(topDir.path, topMarkers.length > 0 ? topMarkers : topUmbrella, pMeta, topWsInfo, topEntryNames);
           looseProjects.push({ kind: 'project', project });
         }
         continue;

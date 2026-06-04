@@ -10,6 +10,9 @@ export interface Project {
   description?: string;
   workspaceFile?: string;
   starred?: boolean;
+  // Capped, cleaned text corpus (README excerpt + manifest blurb) the search
+  // matches against, so a project can be found by what it is, not just its name.
+  searchText?: string;
 }
 
 export interface Shelf {
