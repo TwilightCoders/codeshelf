@@ -7,6 +7,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Content search** — each project is indexed into a small search corpus (a
+  cleaned README excerpt + a description/keywords blurb from its package
+  manifest: `package.json`/`composer.json`/`Cargo.toml`/`pyproject.toml`/gemspec).
+  Both the header filter and the Cmd/Ctrl+K palette now match that corpus, not
+  just the project name; Cmd+K shows a snippet of the matching text. Indexing
+  happens during the scan (no extra `readdir`; one bounded `readFile` per
+  README/manifest) and ships in `project.searchText`.
 - **Cmd/Ctrl+K command palette** — a global quick-switcher that searches every
   project across all roots and shelves (hidden ones included), with keyboard
   navigation; Enter opens the project (its workspace if it has one).

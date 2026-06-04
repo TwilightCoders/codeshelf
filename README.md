@@ -9,6 +9,7 @@ A Steam Library-style project browser for VS Code. Point CodeShelf at the direct
 - **Cmd/Ctrl+K quick-switcher** — a command palette that searches every project across all roots and shelves; arrow keys navigate, Enter opens (its workspace if it has one).
 - **Multi-folder workspaces** — a directory containing a `.code-workspace` is surfaced as a bookset, and the card can open the whole workspace.
 - **Poster art** — generate minimal SVG posters per project with the Claude CLI (if installed), or attach your own image. Injected SVG is sanitized before display.
+- **Content search** — each project is indexed (README excerpt + a description/keywords blurb from its package manifest) into a small searchable corpus, so the header filter and the Cmd+K palette find a project by *what it is*, not just its name. Cmd+K shows a snippet of the matching text.
 - **Star, hide, search, sort** — pin favorites, hide noise, filter across all projects or within a shelf, and sort by recency, name, or language.
 - **Stale fade** — optionally dim projects you haven't touched in a while.
 - **Themed & accessible** — a tokenized design system that adapts to light and dark VS Code themes, with keyboard-operable cards, focus rings, and reduced-motion support.
