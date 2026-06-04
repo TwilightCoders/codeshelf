@@ -13,6 +13,11 @@ export interface Project {
   // Capped, cleaned text corpus (README excerpt + manifest blurb) the search
   // matches against, so a project can be found by what it is, not just its name.
   searchText?: string;
+  // Top distinctive terms (TF-IDF over the whole library), shown as chips.
+  tags?: string[];
+  // Transient: candidate term→count map used to compute `tags` during the scan.
+  // Stripped before the shelves are cached/sent to the webview.
+  tagCounts?: Record<string, number>;
 }
 
 export interface Shelf {

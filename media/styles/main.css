@@ -1762,3 +1762,23 @@ body.modal-open {
     animation: none;
   }
 }
+
+/* ── Auto-derived keyword tags (TF-IDF) ── */
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  max-height: calc(2 * (var(--fs-2xs) * 1.4 + 2 * var(--sp-2)));
+  overflow: hidden;
+}
+
+.card-tag {
+  font-size: var(--fs-2xs);
+  line-height: 1.4;
+  padding: 1px var(--sp-3);
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+}

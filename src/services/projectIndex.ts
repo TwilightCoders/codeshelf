@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import ignore from 'ignore';
 import { SKIP_DIRS } from '../shared/constants';
+import { Project } from '../shared/types';
 import { NON_NOUN_WORDS } from './nonNouns.generated';
 
 // Builds the per-project search corpus: a capped, cleaned blob of the README
@@ -76,6 +77,8 @@ export function assembleSearchText(blurb: string, docText: string): string {
 
 const FINAL_CAP = 6000;
 const VOCAB_CAP = 300;          // max distinct residue words kept per project
+const TAG_CANDIDATES = 40;      // top residue words (by raw count) kept for TF-IDF
+const TAG_COUNT = 5;            // tags surfaced per project
 const WORD_SPLIT = /[^A-Za-z0-9]+/;
 
 // Texty file extensions worth tokenizing (source + prose + config); binaries,
@@ -113,9 +116,9 @@ function isTexty(name: string): boolean {
  * denylist), pure-numbers, and too-short/long tokens removed. What survives is
  * nouns + adjectives + out-of-vocabulary custom words. Pure + capped.
  */
-export function extractVocabulary(text: string, deny: Set<string>, cap = VOCAB_CAP): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
+/** Count occurrences of each surviving token (after denylist subtraction). Pure. */
+export function countVocabulary(text: string, deny: Set<string>): Map<string, number> {
+  const counts = new Map<string, number>();
   for (const raw of text.split(WORD_SPLIT)) {
     if (!raw) continue;
     const split = raw
@@ -126,13 +129,67 @@ export function extractVocabulary(text: string, deny: Set<string>, cap = VOCAB_C
       if (w.length < 3 || w.length > 24) continue;
       if (/^\d+$/.test(w)) continue;                    // pure number
       if (!/[a-z]/.test(w)) continue;                   // must contain a letter
-      if (deny.has(w) || seen.has(w)) continue;
-      seen.add(w);
-      out.push(w);
-      if (out.length >= cap) return out;
+      if (deny.has(w)) continue;
+      counts.set(w, (counts.get(w) ?? 0) + 1);
     }
   }
-  return out;
+  return counts;
+}
+
+/** Distinct surviving words, frequency-ranked (desc), capped. */
+export function extractVocabulary(text: string, deny: Set<string>, cap = VOCAB_CAP): string[] {
+  return rankByCount(countVocabulary(text, deny)).slice(0, cap);
+}
+
+function rankByCount(counts: Map<string, number>): string[] {
+  // Array.sort is stable, so ties keep first-seen (insertion) order.
+  return [...counts.keys()].sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0));
+}
+
+// ── TF-IDF tags (computed across the whole library once all projects are indexed) ──
+
+/** How many projects contain each candidate term. */
+export function documentFrequencies(perProject: Array<Record<string, number>>): Map<string, number> {
+  const df = new Map<string, number>();
+  for (const counts of perProject) {
+    for (const word of Object.keys(counts)) df.set(word, (df.get(word) ?? 0) + 1);
+  }
+  return df;
+}
+
+/**
+ * Rank a project's candidate terms by tf·idf and return the top N. Words present
+ * in every project (idf=0) drop out; rare-but-frequent-here words rise. With a
+ * single project idf is meaningless, so it falls back to raw term frequency.
+ */
+export function tfidfTags(
+  counts: Record<string, number>,
+  df: Map<string, number>,
+  numDocs: number,
+  topN = TAG_COUNT,
+): string[] {
+  const scored = Object.entries(counts).map(([word, tf]) => {
+    const idf = numDocs > 1 ? Math.log(numDocs / (df.get(word) ?? 1)) : 1;
+    return { word, score: tf * idf };
+  });
+  return scored
+    .filter(s => s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topN)
+    .map(s => s.word);
+}
+
+/** Assign `tags` to every project via TF-IDF over their candidate counts, then
+ *  strip the transient `tagCounts` so it isn't cached or sent to the webview. */
+export function applyTfIdfTags(projects: Project[]): void {
+  const df = documentFrequencies(projects.map(p => p.tagCounts ?? {}));
+  for (const p of projects) {
+    if (p.tagCounts) {
+      const tags = tfidfTags(p.tagCounts, df, projects.length);
+      if (tags.length) p.tags = tags;
+    }
+    delete p.tagCounts;
+  }
 }
 
 /**
@@ -188,7 +245,13 @@ export async function gatherProjectText(dir: string, rootEntryNames: string[]): 
  * (gitignore-respecting). `entryNames` may be supplied (the scanner already has
  * them); otherwise the directory is read here.
  */
-export async function buildSearchText(dir: string, entryNames?: string[]): Promise<string | undefined> {
+export interface ProjectIndex {
+  searchText?: string;
+  /** Top candidate term→count map for TF-IDF tagging (see applyTfIdfTags). */
+  tagCounts?: Record<string, number>;
+}
+
+export async function buildSearchText(dir: string, entryNames?: string[]): Promise<ProjectIndex> {
   const names = entryNames ?? await fs.promises.readdir(dir).catch((): string[] => []);
   const readmeName = names.find(e => README_RE.test(e));
   const manifestName = pickManifest(names);
@@ -202,7 +265,17 @@ export async function buildSearchText(dir: string, entryNames?: string[]): Promi
   const blurb = manifestName ? extractManifestBlurb(manifestName, manifest) : '';
   const docText = [readme, context].filter(Boolean).join('\n\n');
   const base = assembleSearchText(blurb, docText);
-  const vocab = extractVocabulary(fileText, denylist()).join(' ');
+
+  const counts = countVocabulary(fileText, denylist());
+  const ranked = rankByCount(counts);
+  const vocab = ranked.slice(0, VOCAB_CAP).join(' ');
   const corpus = [base, vocab].filter(Boolean).join(' — ').slice(0, FINAL_CAP);
-  return corpus || undefined;
+
+  const tagCounts: Record<string, number> = {};
+  for (const word of ranked.slice(0, TAG_CANDIDATES)) tagCounts[word] = counts.get(word) ?? 0;
+
+  return {
+    searchText: corpus || undefined,
+    tagCounts: Object.keys(tagCounts).length ? tagCounts : undefined,
+  };
 }

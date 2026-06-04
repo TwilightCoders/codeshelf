@@ -54,7 +54,7 @@ function createMockShelves(): Shelf[] {
     {
       name: 'Gems', path: '/mock/code/Gems', rootLabel: 'Code', rootPath: '/mock/code',
       items: [
-        { kind: 'project', project: { name: 'glossary', path: '/mock/code/Gems/glossary', markers: ['.git', '*.gemspec'], primaryLanguage: 'ruby', gitBranch: 'main', lastModified: Date.now() - DAY * 2, starred: true, searchText: 'Translation toolkit for constructed languages like Esperanto and Ido. A lexicon builder.' } },
+        { kind: 'project', project: { name: 'glossary', path: '/mock/code/Gems/glossary', markers: ['.git', '*.gemspec'], primaryLanguage: 'ruby', gitBranch: 'main', lastModified: Date.now() - DAY * 2, starred: true, searchText: 'Translation toolkit for constructed languages like Esperanto and Ido. A lexicon builder.', tags: ['esperanto', 'lexicon', 'translation', 'ido'] } },
         { kind: 'project', project: { name: 'task_queue-redis', path: '/mock/code/Gems/task_queue-redis', markers: ['.git', '*.gemspec'], primaryLanguage: 'ruby', gitBranch: 'overhaul', lastModified: Date.now() - DAY * 30 } },
         { kind: 'project', project: { name: 'radio-client', path: '/mock/code/Gems/radio-client', markers: ['.git', '*.gemspec'], primaryLanguage: 'ruby', gitBranch: 'main', lastModified: Date.now() - DAY * 180 } },
         { kind: 'project', project: { name: 'created_at', path: '/mock/code/Gems/created_at', markers: ['.git', '*.gemspec'], primaryLanguage: 'ruby', gitBranch: 'main', lastModified: Date.now() - DAY * 365 } },

@@ -534,6 +534,20 @@ describe('command palette', () => {
   });
 });
 
+// ── Keyword tag chips ──
+
+describe('keyword tags', () => {
+  it('renders tag chips for a project that has them', async () => {
+    const tags = await page.evaluate(() => {
+      const card = Array.from(document.querySelectorAll('.project-card'))
+        .find(c => c.querySelector('.card-name')?.textContent === 'glossary');
+      return Array.from(card?.querySelectorAll('.card-tag') ?? [], e => e.textContent);
+    });
+    expect(tags).toContain('esperanto');
+    expect(tags.length).toBeGreaterThan(0);
+  });
+});
+
 // ── Content search in the header filter ──
 
 describe('header content search', () => {

@@ -181,6 +181,18 @@ describe('scanRoots (filesystem)', () => {
     expect(corpus).not.toContain('confidentialword'); // secret.txt is .gitignore'd
   });
 
+  it('computes tags from the corpus and strips the transient counts', async () => {
+    const shelves = await scanRoots({ [root1]: {} }, 3);
+    const all = shelves.flatMap(s => s.items).flatMap(i => i.kind === 'project' ? [i.project] : i.projects);
+    const p = all.find(x => x.name === 'synapse');
+    expect(p?.tags && p.tags.length).toBeTruthy();        // tags populated
+    expect(p!.tags!.every(t => p!.searchText!.toLowerCase().includes(t))).toBe(true); // tags come from the corpus
+    expect(p!.tags).not.toContain('the');                 // denied words never tagged
+    expect('tagCounts' in p!).toBe(false);                // transient field stripped before output
+    // (TF-IDF demotion of ubiquitous terms is covered by the unit tests; this
+    // 10-project fixture is too small for IDF to separate rare generics.)
+  });
+
   // ── Umbrella markers → super-projects ──
 
   it('treats a top-level umbrella-marked dir as a single super-project, not a shelf', async () => {

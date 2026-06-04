@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickManifest, extractManifestBlurb, cleanDocText, assembleSearchText, extractVocabulary } from '../src/services/projectIndex';
+import { pickManifest, extractManifestBlurb, cleanDocText, assembleSearchText, extractVocabulary, documentFrequencies, tfidfTags } from '../src/services/projectIndex';
 
 describe('pickManifest', () => {
   it('prefers package.json over other manifests', () => {
@@ -86,5 +86,35 @@ describe('extractVocabulary', () => {
 
   it('respects the cap', () => {
     expect(extractVocabulary('alpha bravo charlie delta echo', none, 2)).toHaveLength(2);
+  });
+
+  it('is frequency-ranked (most common first)', () => {
+    expect(extractVocabulary('dog dog dog cat cat bird', none, 3)).toEqual(['dog', 'cat', 'bird']);
+  });
+});
+
+describe('TF-IDF tags', () => {
+  it('documentFrequencies counts how many projects contain each term', () => {
+    const df = documentFrequencies([{ a: 5, b: 1 }, { a: 3, c: 2 }, { a: 1, d: 4 }]);
+    expect(df.get('a')).toBe(3);
+    expect(df.get('b')).toBe(1);
+    expect(df.get('d')).toBe(1);
+  });
+
+  it('drops ubiquitous terms (in every project) and promotes rare ones', () => {
+    const df = documentFrequencies([{ common: 9, rare: 2 }, { common: 9, x: 1 }, { common: 9, y: 1 }]);
+    const tags = tfidfTags({ common: 9, rare: 2 }, df, 3, 5);
+    expect(tags).toContain('rare');        // df=1 → high idf
+    expect(tags).not.toContain('common');  // df=N → idf=0 → dropped
+  });
+
+  it('falls back to raw frequency for a single project', () => {
+    const counts = { alpha: 5, beta: 2, gamma: 1 };
+    expect(tfidfTags(counts, documentFrequencies([counts]), 1, 2)).toEqual(['alpha', 'beta']);
+  });
+
+  it('respects topN', () => {
+    const counts = { a: 5, b: 4, c: 3, d: 2 };
+    expect(tfidfTags(counts, documentFrequencies([counts, { e: 1 }]), 2, 2)).toHaveLength(2);
   });
 });

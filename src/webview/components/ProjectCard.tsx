@@ -65,6 +65,11 @@ export const ProjectCard = memo(function ProjectCard({ project, rootPath, forgin
           {project.gitBranch && <span className="card-branch"><i className="codicon codicon-git-branch" /> {project.gitBranch}</span>}
           <span className="card-time">{timeAgo(project.lastModified)}</span>
         </div>
+        {project.tags && project.tags.length > 0 && (
+          <div className="card-tags">
+            {project.tags.slice(0, 4).map(t => <span key={t} className="card-tag">{t}</span>)}
+          </div>
+        )}
       </div>
     </div>
   );

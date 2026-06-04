@@ -7,7 +7,7 @@ import {
 import { Project, Shelf, ShelfItem, ProjectItem, RootsConfig, RootConfig, ShelfMeta, ProjectMeta } from '../shared/types';
 import { getBranch } from './gitInfo';
 import { parseWorkspaceFile, WorkspaceInfo } from './workspaceFile';
-import { buildSearchText } from './projectIndex';
+import { buildSearchText, applyTfIdfTags } from './projectIndex';
 
 // Cap on how many sibling directories are probed at once. Keeps a very wide
 // root from spawning hundreds of concurrent fs operations / open descriptors.
@@ -113,7 +113,7 @@ async function buildProject(
   wsInfo?: WorkspaceInfo | null,
   entryNames?: string[],
 ): Promise<Project> {
-  const [stat, ws, searchText] = await Promise.all([
+  const [stat, ws, index] = await Promise.all([
     fs.promises.stat(dir),
     wsInfo === undefined ? parseWorkspaceFile(dir) : Promise.resolve(wsInfo),
     buildSearchText(dir, entryNames),
@@ -131,7 +131,8 @@ async function buildProject(
     description: projectMeta?.description,
     workspaceFile: ws?.filePath,
     starred: projectMeta?.starred,
-    searchText,
+    searchText: index.searchText,
+    tagCounts: index.tagCounts,
   };
 }
 
@@ -473,6 +474,17 @@ export async function scanRoots(
       });
     }
   }
+
+  // With every project indexed, weight each one's candidate terms by rarity
+  // across the whole library (TF-IDF) to pick distinctive tags; strips tagCounts.
+  const allProjects: Project[] = [];
+  for (const shelf of shelves) {
+    for (const item of shelf.items) {
+      if (item.kind === 'project') allProjects.push(item.project);
+      else allProjects.push(...item.projects);
+    }
+  }
+  applyTfIdfTags(allProjects);
 
   return shelves;
 }
