@@ -55,7 +55,7 @@ describe('assembleSearchText', () => {
   });
   it('caps total length', () => {
     const out = assembleSearchText('', 'x'.repeat(5000));
-    expect(out.length).toBeLessThanOrEqual(2000);
+    expect(out.length).toBeLessThanOrEqual(3000);
   });
   it('returns empty when there is nothing to index', () => {
     expect(assembleSearchText('', '')).toBe('');

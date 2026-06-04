@@ -6,9 +6,9 @@ import * as path from 'path';
 // Kept small so it ships in the shelf cache and matches cheaply client-side.
 
 const README_RE = /^readme(\.(md|markdown|mdown|txt|rst))?$/i;
-const README_CAP = 1500;
+const DOC_CAP = 2400;
 const BLURB_CAP = 400;
-const TOTAL_CAP = 2000;
+const TOTAL_CAP = 3000;
 
 // Manifests we know how to pull a description/keywords blurb from, by priority.
 const MANIFESTS = ['package.json', 'composer.json', 'deno.json', 'Cargo.toml', 'pyproject.toml'];
@@ -61,27 +61,33 @@ export function cleanDocText(raw: string): string {
     .trim();
 }
 
-/** Assemble the capped corpus from a manifest blurb and a raw README. */
-export function assembleSearchText(blurb: string, readme: string): string {
-  const readmeExcerpt = cleanDocText(readme).slice(0, README_CAP);
+/** Assemble the capped corpus from a manifest blurb and raw doc text. */
+export function assembleSearchText(blurb: string, docText: string): string {
+  const docExcerpt = cleanDocText(docText).slice(0, DOC_CAP);
   const blurbExcerpt = blurb.slice(0, BLURB_CAP);
-  const corpus = [blurbExcerpt, readmeExcerpt].filter(Boolean).join(' — ');
+  const corpus = [blurbExcerpt, docExcerpt].filter(Boolean).join(' — ');
   return corpus.slice(0, TOTAL_CAP).trim();
 }
 
 /**
- * Read a project's README + manifest and return its search corpus (undefined if
- * empty). `entryNames` may be supplied (the scanner already has them); otherwise
- * the directory is read here.
+ * Read a project's docs + manifest and return its search corpus (undefined if
+ * empty). Doc sources: a top-level README, plus the project's own
+ * `.claude/CONTEXT.md` — the curated description many projects keep instead of
+ * (or alongside) a README, so README-less projects (Xcode/C++/etc.) still index.
+ * `entryNames` may be supplied (the scanner already has them); otherwise the
+ * directory is read here.
  */
 export async function buildSearchText(dir: string, entryNames?: string[]): Promise<string | undefined> {
   const names = entryNames ?? await fs.promises.readdir(dir).catch((): string[] => []);
   const readmeName = names.find(e => README_RE.test(e));
   const manifestName = pickManifest(names);
-  const [readme, manifest] = await Promise.all([
-    readmeName ? fs.promises.readFile(path.join(dir, readmeName), 'utf-8').catch(() => '') : Promise.resolve(''),
-    manifestName ? fs.promises.readFile(path.join(dir, manifestName), 'utf-8').catch(() => '') : Promise.resolve(''),
+  const read = (...rel: string[]) => fs.promises.readFile(path.join(dir, ...rel), 'utf-8').catch(() => '');
+  const [readme, context, manifest] = await Promise.all([
+    readmeName ? read(readmeName) : Promise.resolve(''),
+    names.includes('.claude') ? read('.claude', 'CONTEXT.md') : Promise.resolve(''),
+    manifestName ? read(manifestName) : Promise.resolve(''),
   ]);
   const blurb = manifestName ? extractManifestBlurb(manifestName, manifest) : '';
-  return assembleSearchText(blurb, readme) || undefined;
+  const docText = [readme, context].filter(Boolean).join('\n\n');
+  return assembleSearchText(blurb, docText) || undefined;
 }

@@ -50,6 +50,13 @@ beforeAll(async () => {
   await fs.promises.writeFile(path.join(root1, 'helix-tunnel', 'README.md'),
     '# Helix Tunnel\n\nLow-latency reverse tunnel built on QUIC. Esperanto-friendly.\n');
 
+  // A README-less Xcode-style project that documents itself only in
+  // .claude/CONTEXT.md (the Cortex case): no README, no indexable manifest.
+  await fs.promises.mkdir(path.join(root1, 'cortex', 'cortex.xcodeproj'), { recursive: true });
+  await fs.promises.mkdir(path.join(root1, 'cortex', '.claude'), { recursive: true });
+  await fs.promises.writeFile(path.join(root1, 'cortex', '.claude', 'CONTEXT.md'),
+    '# Cortex\n\nA spiking neural network simulator written in C++.\n');
+
   // root2: a multi-folder .code-workspace → bookset shelf "WS"
   const ws = path.join(root2, 'WS');
   await mkproj(path.join(ws, 'frontend'), 'package.json');
@@ -144,6 +151,15 @@ describe('scanRoots (filesystem)', () => {
     expect(corpus).toContain('quic');         // manifest description + README
     expect(corpus).toContain('multiplexing'); // manifest keyword
     expect(corpus).toContain('esperanto');    // README body
+  });
+
+  it('indexes .claude/CONTEXT.md for README-less projects (the Cortex case)', async () => {
+    const shelves = await scanRoots({ [root1]: {} }, 3);
+    const all = shelves.flatMap(s => s.items).flatMap(i => i.kind === 'project' ? [i.project] : i.projects);
+    const p = all.find(x => x.name === 'cortex');
+    expect(p).toBeDefined();
+    // No README, no indexable manifest — corpus comes from .claude/CONTEXT.md.
+    expect((p!.searchText ?? '').toLowerCase()).toContain('neural');
   });
 
   // ── Umbrella markers → super-projects ──

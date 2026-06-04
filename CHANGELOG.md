@@ -8,8 +8,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - **Content search** — each project is indexed into a small search corpus (a
-  cleaned README excerpt + a description/keywords blurb from its package
-  manifest: `package.json`/`composer.json`/`Cargo.toml`/`pyproject.toml`/gemspec).
+  cleaned README excerpt, the project's `.claude/CONTEXT.md` if present, and a
+  description/keywords blurb from its package manifest:
+  `package.json`/`composer.json`/`Cargo.toml`/`pyproject.toml`/gemspec). Indexing
+  `.claude/CONTEXT.md` means README-less projects (Xcode/C++/etc.) still get a
+  searchable corpus.
   Both the header filter and the Cmd/Ctrl+K palette now match that corpus, not
   just the project name; Cmd+K shows a snippet of the matching text. Indexing
   happens during the scan (no extra `readdir`; one bounded `readFile` per
