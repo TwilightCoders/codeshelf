@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { pickManifest, extractManifestBlurb, cleanDocText, assembleSearchText, extractVocabulary, documentFrequencies, tfidfTags } from '../src/services/projectIndex';
+import { pickManifest, extractManifestBlurb, cleanDocText, assembleSearchText, extractVocabulary, documentFrequencies, tfidfTags, nameTokens } from '../src/services/projectIndex';
+import { PROGRAMMING_KEYWORDS } from '../src/services/programmingKeywords.generated';
 
 describe('pickManifest', () => {
   it('prefers package.json over other manifests', () => {
@@ -90,6 +91,45 @@ describe('extractVocabulary', () => {
 
   it('is frequency-ranked (most common first)', () => {
     expect(extractVocabulary('dog dog dog cat cat bird', none, 3)).toEqual(['dog', 'cat', 'bird']);
+  });
+});
+
+describe('nameTokens', () => {
+  it('splits on space, hyphen, underscore, and dot', () => {
+    expect([...nameTokens('task_queue-redis')]).toEqual(expect.arrayContaining(['task', 'queue', 'redis']));
+    expect([...nameTokens('created_at')]).toEqual(expect.arrayContaining(['created', 'at']));
+  });
+
+  it('also splits camelCase / PascalCase, mirroring the tokenizer', () => {
+    // Otherwise a project named TileMapper would keep tagging itself "tile"/"mapper".
+    expect([...nameTokens('TileMapper')]).toEqual(expect.arrayContaining(['tile', 'mapper']));
+    expect([...nameTokens('HTTPServer')]).toEqual(expect.arrayContaining(['http', 'server']));
+  });
+
+  it('lowercases and drops single characters', () => {
+    expect([...nameTokens('A-b-Cat')]).toEqual(['cat']); // 'a','b' too short
+  });
+});
+
+describe('PROGRAMMING_KEYWORDS (generated)', () => {
+  const kw = new Set(PROGRAMMING_KEYWORDS.split('\n').filter(Boolean));
+
+  it('contains structural keywords the WordNet denylist misses', () => {
+    for (const w of ['end', 'func', 'fn', 'unsigned', 'nil', 'const', 'return', 'iota', 'elsif', 'puts']) {
+      expect(kw.has(w), `expected keyword "${w}"`).toBe(true);
+    }
+  });
+
+  it('excludes SQL "keywords" that are ordinary nouns (so DB projects keep them)', () => {
+    for (const w of ['table', 'schema', 'view', 'index', 'order', 'group', 'column']) {
+      expect(kw.has(w), `"${w}" should NOT be denied`).toBe(false);
+    }
+  });
+
+  it('does not strip real domain nouns', () => {
+    for (const w of ['neuron', 'axon', 'synapse', 'lexicon', 'station']) {
+      expect(kw.has(w)).toBe(false);
+    }
   });
 });
 

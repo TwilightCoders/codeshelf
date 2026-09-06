@@ -4,6 +4,7 @@ import ignore from 'ignore';
 import { SKIP_DIRS } from '../shared/constants';
 import { Project } from '../shared/types';
 import { NON_NOUN_WORDS } from './nonNouns.generated';
+import { PROGRAMMING_KEYWORDS } from './programmingKeywords.generated';
 
 // Builds the per-project search corpus: a capped, cleaned blob of the README
 // excerpt plus a one-line "blurb" pulled from the project's package manifest.
@@ -100,8 +101,36 @@ const MAX_TOTAL_BYTES = 256 * 1024;
 
 let _denylist: Set<string> | undefined;
 function denylist(): Set<string> {
-  if (!_denylist) _denylist = new Set(NON_NOUN_WORDS.split('\n'));
+  // WordNet "never-a-noun" words ∪ programming-language keywords (harvested from
+  // VS Code's own grammars). The residue is nouns + adjectives + custom terms,
+  // minus the structural tokens (func/const/unsigned/nil/iota/…) that pollute
+  // both search and tags.
+  if (!_denylist) {
+    _denylist = new Set(NON_NOUN_WORDS.split('\n'));
+    for (const kw of PROGRAMMING_KEYWORDS.split('\n')) if (kw) _denylist.add(kw);
+  }
   return _denylist;
+}
+
+/**
+ * Split a project's directory name into the lowercased word tokens it would
+ * produce under the same camelCase/snake/kebab/dot splitting the tokenizer uses,
+ * so a project never tags itself (`TileMapper` → {tile, mapper}, so neither word
+ * is offered as one of its own keywords). Pure.
+ */
+export function nameTokens(name: string): Set<string> {
+  const out = new Set<string>();
+  for (const raw of name.split(/[ \-_.]+/)) {
+    if (!raw) continue;
+    const split = raw
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+    for (const piece of split.split(' ')) {
+      const w = piece.toLowerCase();
+      if (w.length >= 2) out.add(w);
+    }
+  }
+  return out;
 }
 
 function isTexty(name: string): boolean {
@@ -271,8 +300,13 @@ export async function buildSearchText(dir: string, entryNames?: string[]): Promi
   const vocab = ranked.slice(0, VOCAB_CAP).join(' ');
   const corpus = [base, vocab].filter(Boolean).join(' — ').slice(0, FINAL_CAP);
 
+  // Tag candidates exclude the project's own name tokens — a project shouldn't
+  // surface its own name as a "keyword" (the card already shows the name).
+  const ownName = nameTokens(path.basename(dir));
   const tagCounts: Record<string, number> = {};
-  for (const word of ranked.slice(0, TAG_CANDIDATES)) tagCounts[word] = counts.get(word) ?? 0;
+  for (const word of ranked.filter(w => !ownName.has(w)).slice(0, TAG_CANDIDATES)) {
+    tagCounts[word] = counts.get(word) ?? 0;
+  }
 
   return {
     searchText: corpus || undefined,

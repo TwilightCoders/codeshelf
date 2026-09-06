@@ -4,11 +4,13 @@
  * the project indexer subtracts from each project's tokens (leaving nouns +
  * out-of-vocabulary "custom" words: identifiers, names, jargon, acronyms).
  *
- * Source: WordNet 3.1 (the `wordnet-db` devDependency). We take every verb /
- * adjective / adverb lemma that is NOT also a noun, then add the closed-class
- * function words WordNet omits (the/is/of/to/…). Subtracting "verbs" naively
- * would wrongly strip noun∩verb words (stream, build, cache, branch); keying off
- * "not in the noun index" is what protects them.
+ * Source: WordNet 3.1 (the `wordnet-db` devDependency). We take every verb and
+ * adverb lemma that is NOT also a noun, then add the closed-class function words
+ * WordNet omits (the/is/of/to/…). We deliberately do NOT strip adjectives —
+ * descriptive tech terms (neural, distributed, concurrent, reactive) are exactly
+ * what a code search wants — so the residue is nouns + adjectives + custom words.
+ * Keying off "not in the noun index" also protects noun∩verb words (stream,
+ * build, cache, branch) from being stripped.
  *
  * Run from the repo root:  node scripts/derive-nonnouns.mjs
  */
@@ -29,7 +31,8 @@ function lemmas(file) {
 }
 
 const nouns = lemmas('index.noun');
-const others = new Set([...lemmas('index.verb'), ...lemmas('index.adj'), ...lemmas('index.adv')]);
+// Verbs + adverbs only — adjectives are intentionally kept (see header).
+const others = new Set([...lemmas('index.verb'), ...lemmas('index.adv')]);
 
 const func = ('the a an and or but nor for so yet of to in on at by from with about against between into ' +
   'through during before after above below up down out off over under again further then once here there ' +
@@ -47,9 +50,10 @@ for (const f of func) deny.add(f);
 const body = [...deny].sort().join('\n');
 fs.writeFileSync('src/services/nonNouns.generated.ts',
   '// GENERATED FILE — do not edit by hand. Regenerate: node scripts/derive-nonnouns.mjs\n' +
-  '// "Never-a-noun" denylist: WordNet 3.1 verb/adjective/adverb lemmas that are NOT\n' +
-  '// also nouns, plus the closed-class function words WordNet omits. Subtracting this\n' +
-  '// set from a project\'s tokens leaves nouns + out-of-vocabulary "custom" words.\n' +
+  '// Denylist of words to strip from a project\'s tokens: WordNet 3.1 verb + adverb\n' +
+  '// lemmas that are NOT also nouns, plus the closed-class function words WordNet\n' +
+  '// omits. Adjectives are intentionally KEPT, so the residue is nouns + adjectives\n' +
+  '// + out-of-vocabulary "custom" words (identifiers, names, jargon).\n' +
   '/* eslint-disable */\n' +
   'export const NON_NOUN_WORDS = `' + body + '`;\n');
 
