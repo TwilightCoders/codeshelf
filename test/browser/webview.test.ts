@@ -548,6 +548,75 @@ describe('keyword tags', () => {
   });
 });
 
+// ── Worktree deck ──
+
+function startpageCardInfo() {
+  return page.evaluate(() => {
+    const card = Array.from(document.querySelectorAll('.project-card'))
+      .find(c => c.querySelector('.card-name')?.textContent === 'startpage');
+    return {
+      isDeck: card?.classList.contains('is-deck') ?? false,
+      toggle: card?.querySelector('.worktree-toggle')?.textContent?.trim() ?? null,
+    };
+  });
+}
+
+async function clickStartpageToggle() {
+  await page.evaluate(() => {
+    const card = Array.from(document.querySelectorAll('.project-card'))
+      .find(c => c.querySelector('.card-name')?.textContent === 'startpage');
+    card?.querySelector<HTMLElement>('.worktree-toggle')?.click();
+  });
+  await new Promise(r => setTimeout(r, 150));
+}
+
+describe('worktree deck', () => {
+  it('renders a project with worktrees as a deck with a count toggle', async () => {
+    const info = await startpageCardInfo();
+    expect(info.isDeck).toBe(true);
+    expect(info.toggle).toContain('2 worktrees');
+  });
+
+  it('a project without worktrees is not a deck', async () => {
+    const isDeck = await page.evaluate(() => {
+      const card = Array.from(document.querySelectorAll('.project-card'))
+        .find(c => c.querySelector('.card-name')?.textContent === 'glossary');
+      return card?.classList.contains('is-deck') ?? false;
+    });
+    expect(isDeck).toBe(false);
+  });
+
+  it('expands to list the worktree branches', async () => {
+    await clickStartpageToggle();
+    const branches = await page.evaluate(() => {
+      const card = Array.from(document.querySelectorAll('.project-card'))
+        .find(c => c.querySelector('.card-name')?.textContent === 'startpage');
+      return Array.from(card?.querySelectorAll('.worktree-item') ?? [], e => e.textContent?.trim());
+    });
+    expect(branches.some(b => b?.includes('feature/card-deck'))).toBe(true);
+    expect(branches.some(b => b?.includes('feature/content-search'))).toBe(true);
+  });
+
+  it('opening a worktree posts project:open with the worktree path', async () => {
+    const messages: string[] = [];
+    page.on('console', msg => messages.push(msg.text()));
+    // Make sure the list is expanded.
+    const expanded = await page.evaluate(() => {
+      const card = Array.from(document.querySelectorAll('.project-card'))
+        .find(c => c.querySelector('.card-name')?.textContent === 'startpage');
+      return !!card?.querySelector('.worktree-list');
+    });
+    if (!expanded) await clickStartpageToggle();
+    await page.evaluate(() => {
+      const card = Array.from(document.querySelectorAll('.project-card'))
+        .find(c => c.querySelector('.card-name')?.textContent === 'startpage');
+      card?.querySelector<HTMLElement>('.worktree-item')?.click();
+    });
+    await new Promise(r => setTimeout(r, 200));
+    expect(messages.some(m => m.includes('project:open') && m.includes('startpage-worktrees'))).toBe(true);
+  });
+});
+
 // ── Content search in the header filter ──
 
 describe('header content search', () => {
@@ -675,5 +744,167 @@ describe('visual oversight', () => {
 
     const path = await screenshot(page, '07-after-star-hide');
     expect(path).toContain('07-after-star-hide.png');
+  });
+});
+
+// ── Shelf inline filter + overflow ──
+
+async function typeShelfFilter(shelfName: string, value: string) {
+  await page.evaluate(({ shelfName, value }) => {
+    const row = Array.from(document.querySelectorAll('.shelf-row'))
+      .find(r => r.querySelector('.shelf-row-title')?.textContent?.includes(shelfName));
+    const input = row?.querySelector<HTMLInputElement>('.shelf-filter-input');
+    if (!input) return;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }, { shelfName, value });
+  await new Promise(r => setTimeout(r, 250));
+}
+
+function shelfState(shelfName: string) {
+  return page.evaluate(name => {
+    const row = Array.from(document.querySelectorAll('.shelf-row'))
+      .find(r => r.querySelector('.shelf-row-title')?.textContent?.includes(name));
+    return {
+      present: !!row,
+      hasFilterInput: !!row?.querySelector('.shelf-filter-input'),
+      hasEmptyState: !!row?.querySelector('.shelf-empty'),
+      cards: row?.querySelectorAll('.project-card').length ?? 0,
+    };
+  }, shelfName);
+}
+
+describe('shelf inline filter', () => {
+  it('narrows the shelf to matching cards', async () => {
+    await typeShelfFilter('Gems', 'glossary');
+    const s = await shelfState('Gems');
+    expect(s.cards).toBe(1);
+    expect(s.hasEmptyState).toBe(false);
+  });
+
+  it('keeps the shelf AND its filter input when nothing matches', async () => {
+    // Regression: this used to `return null`, unmounting the very input the user
+    // was typing into — leaving no way to clear the filter (section "disappeared").
+    await typeShelfFilter('Gems', 'zzzznomatch');
+    const s = await shelfState('Gems');
+    expect(s.present).toBe(true);
+    expect(s.hasFilterInput).toBe(true);
+    expect(s.hasEmptyState).toBe(true);
+    expect(s.cards).toBe(0);
+  });
+
+  it('can recover via the Clear filter button', async () => {
+    await typeShelfFilter('Gems', 'zzzznomatch');
+    await page.evaluate(() => {
+      const row = Array.from(document.querySelectorAll('.shelf-row'))
+        .find(r => r.querySelector('.shelf-row-title')?.textContent?.includes('Gems'));
+      row?.querySelector<HTMLElement>('.shelf-empty-clear')?.click();
+    });
+    await new Promise(r => setTimeout(r, 250));
+    const s = await shelfState('Gems');
+    expect(s.hasEmptyState).toBe(false);
+    expect(s.cards).toBeGreaterThan(0);
+  });
+});
+
+describe('large shelf overflow', () => {
+  async function injectBigShelf(n: number) {
+    await page.evaluate(count => {
+      window.__mockHost?.injectShelves([{
+        name: 'Big', path: '/mock/big', rootLabel: 'Mock', rootPath: '/mock',
+        items: Array.from({ length: count }, (_, i) => ({
+          kind: 'project' as const,
+          project: { name: `big-${i}`, path: `/mock/big/p${i}`, markers: ['.git'], lastModified: Date.now() - i * 1000 },
+        })),
+      }]);
+    }, n);
+    await new Promise(r => setTimeout(r, 400));
+  }
+
+  it('renders full-height cards regardless of how many are in the shelf', async () => {
+    // Regression: a constrained grid distributed its height across every implicit
+    // row, squeezing 70 cards down to ~11px slivers.
+    await injectBigShelf(40);
+    const h = await page.evaluate(() =>
+      Math.round(document.querySelector('.project-card')!.getBoundingClientRect().height));
+    expect(h).toBeGreaterThan(150);
+  });
+
+  it('offers "Show all N" and expands to reveal every card', async () => {
+    await injectBigShelf(40);
+    expect(await page.evaluate(() => document.querySelector('.shelf-showmore')?.textContent ?? ''))
+      .toContain('Show all 40');
+    await page.evaluate(() => document.querySelector<HTMLElement>('.shelf-showmore')?.click());
+    await new Promise(r => setTimeout(r, 300));
+    const after = await page.evaluate(() => ({
+      label: document.querySelector('.shelf-showmore')?.textContent ?? '',
+      expanded: !!document.querySelector('.shelf-row-content.expanded'),
+    }));
+    expect(after.expanded).toBe(true);
+    expect(after.label).toBe('Show less');
+  });
+
+  it('does not offer "Show all" for a shelf that already fits', async () => {
+    await injectBigShelf(2);
+    expect(await page.$('.shelf-showmore')).toBeNull();
+  });
+});
+
+// ── Bookset grouping ──
+
+describe('bookset rendering', () => {
+  async function injectBookset(count: number, flatten?: 'always' | 'never') {
+    await page.evaluate(({ count, flatten }) => {
+      window.__mockHost?.injectShelves([{
+        name: 'Grouped', path: '/mock/grouped', rootLabel: 'Mock', rootPath: '/mock',
+        ...(flatten ? { flatten } : {}),
+        items: [
+          { kind: 'project' as const, project: { name: 'loose-one', path: '/mock/grouped/loose', markers: ['.git'], lastModified: Date.now() } },
+          {
+            kind: 'bookset' as const, name: 'Notion', path: '/mock/grouped/Notion',
+            projects: Array.from({ length: count }, (_, i) => ({
+              name: `n-${i}`, path: `/mock/grouped/Notion/n${i}`, markers: ['.git'], lastModified: Date.now() - i * 1000,
+            })),
+          },
+        ],
+      }]);
+    }, { count, flatten });
+    await new Promise(r => setTimeout(r, 400));
+  }
+
+  it('renders a bookset over the threshold as a named group with a count', async () => {
+    // Regression: booksets were always flattened into the shelf grid, so the
+    // entire .bookset stylesheet was dead code and `flatten` had no visual effect.
+    await injectBookset(10);
+    const g = await page.evaluate(() => ({
+      groups: document.querySelectorAll('.bookset').length,
+      name: document.querySelector('.bookset-name')?.textContent ?? null,
+      count: document.querySelector('.bookset-count')?.textContent ?? null,
+      inside: document.querySelectorAll('.bookset-projects .project-card').length,
+    }));
+    expect(g.groups).toBe(1);
+    expect(g.name).toBe('Notion');
+    expect(g.count).toBe('10');
+    expect(g.inside).toBe(10);
+  });
+
+  it('flattens a bookset at or under the threshold into the shelf grid', async () => {
+    await injectBookset(3);
+    expect(await page.$('.bookset')).toBeNull();
+    const cards = await page.$$eval('.project-card .card-name', els => els.map(e => e.textContent));
+    expect(cards).toContain('n-0');
+    expect(cards).toContain('loose-one');
+  });
+
+  it('honors flatten: "never" for a small bookset', async () => {
+    await injectBookset(2, 'never');
+    expect(await page.$('.bookset')).not.toBeNull();
+    expect(await page.$eval('.bookset-count', e => e.textContent)).toBe('2');
+  });
+
+  it('honors flatten: "always" for a large bookset', async () => {
+    await injectBookset(12, 'always');
+    expect(await page.$('.bookset')).toBeNull();
   });
 });

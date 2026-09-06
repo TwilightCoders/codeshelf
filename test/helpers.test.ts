@@ -79,6 +79,16 @@ describe('projectMatchesQuery', () => {
   it('matches everything for an empty query', () => {
     expect(projectMatchesQuery(makeProject('x'), '')).toBe(true);
   });
+  it('matches on a keyword tag', () => {
+    // Tags are rendered as chips on every card, so they read as a searchable
+    // affordance; searching a visible tag used to return nothing.
+    const p = makeProject('anne', { tags: ['neuron', 'axon', 'synapse'] });
+    expect(projectMatchesQuery(p, 'synapse')).toBe(true);
+    expect(projectMatchesQuery(p, 'axon')).toBe(true);
+  });
+  it('still returns false when a tag does not match either', () => {
+    expect(projectMatchesQuery(makeProject('anne', { tags: ['neuron'] }), 'rails')).toBe(false);
+  });
 });
 
 // ── matchSnippet ──

@@ -86,6 +86,10 @@
   /* ── Card geometry ── */
   --card-poster-h: 120px;
   --card-min: 184px;
+  /* Collapsed shelf preview = one full card row. A card is poster + name +
+     branch + time + up to 2 tag rows (+ worktree row), ~270px; the old 230px
+     cap sliced the tags off every card. */
+  --shelf-preview-h: 300px;
 }
 
 *,
@@ -497,6 +501,16 @@ body {
   background: var(--surface-1);
 }
 
+/* A compact shelf is a narrow, shrink-to-fit box so small shelves can sit side
+   by side. Its inner grid must therefore lay its few cards out in a ROW — with
+   the normal auto-fill columns the box collapsed to one column wide and stacked
+   the cards vertically, where the preview height then clipped all but the first. */
+.shelf-row.shelf-compact .shelf-row-content {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(var(--card-min), 1fr);
+}
+
 .shelf-row-title {
   font-size: var(--fs-md);
   font-weight: var(--fw-semibold);
@@ -517,14 +531,71 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--card-min), 1fr));
   gap: var(--sp-6);
-  max-height: 230px;
+  /* Preview height fits ONE full card row (poster + info + tags). Without
+     `align-content/grid-auto-rows`, a constrained grid distributes its height
+     across every implicit row, so a 70-card shelf squeezed each card to ~11px
+     and clipped it to a colored sliver. Pack rows at their natural size and let
+     `overflow: hidden` do the clipping it was always meant to do. */
+  align-content: start;
+  grid-auto-rows: max-content;
+  max-height: var(--shelf-preview-h);
   overflow: hidden;
   position: relative;
   padding-top: var(--sp-2);
 }
 
+/* Expanded: show every row. */
+.shelf-row-content.expanded {
+  max-height: none;
+  overflow: visible;
+}
+
 .shelf-row-content.hidden {
   display: none;
+}
+
+/* Empty state for a shelf whose inline filter matched nothing. Replaces the old
+   behaviour of rendering NOTHING, which hid the filter box itself and left the
+   user unable to clear what they had typed. */
+.shelf-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-6) var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--vscode-descriptionForeground);
+}
+
+.shelf-empty-clear {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--vscode-editor-foreground);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  padding: var(--sp-2) var(--sp-4);
+  cursor: pointer;
+}
+
+.shelf-empty-clear:hover {
+  background: var(--surface-3);
+}
+
+/* "Show all N" — without this a shelf silently hid every card past row one. */
+.shelf-showmore {
+  margin-top: var(--sp-3);
+  border: none;
+  background: transparent;
+  color: var(--link);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+
+.shelf-showmore:hover {
+  background: var(--surface-2);
 }
 
 /* Fade out at bottom to hint there's more */
@@ -1781,4 +1852,102 @@ body.modal-open {
   background: var(--surface-2);
   color: var(--vscode-descriptionForeground);
   white-space: nowrap;
+}
+
+/* ── Worktree deck ──
+   A project with git worktrees reads as a stacked deck. The "stack" is drawn
+   with offset box-shadows (painted outside the border-box) so it survives the
+   card's own `overflow: hidden`, with no extra DOM and no clipping. */
+.project-card.is-deck {
+  box-shadow:
+    5px -5px 0 0 var(--surface-2),
+    5px -5px 0 1px var(--hairline),
+    10px -10px 0 0 var(--surface-2),
+    10px -10px 0 1px var(--hairline),
+    var(--shadow-card);
+}
+
+.project-card.is-deck:hover {
+  box-shadow:
+    5px -5px 0 0 var(--surface-2),
+    5px -5px 0 1px var(--hairline),
+    10px -10px 0 0 var(--surface-2),
+    10px -10px 0 1px var(--hairline),
+    var(--shadow-card-hover);
+}
+
+/* Always-visible count, so a deck reads as "N worktrees" even in the clipped
+   shelf-row preview where the expandable toggle below the info is cut off. */
+.card-deck-badge {
+  position: absolute;
+  top: var(--sp-2);
+  left: var(--sp-2);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px var(--sp-2);
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  pointer-events: none;
+}
+
+.card-worktrees {
+  margin-top: var(--sp-2);
+}
+
+.worktree-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-2xs);
+  line-height: 1.4;
+  padding: 1px var(--sp-2);
+  border: none;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+
+.worktree-toggle:hover {
+  background: var(--surface-2);
+  color: var(--vscode-foreground);
+}
+
+.worktree-list {
+  list-style: none;
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.worktree-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  width: 100%;
+  text-align: left;
+  font-size: var(--fs-2xs);
+  line-height: 1.4;
+  padding: 2px var(--sp-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.worktree-item:hover {
+  border-color: var(--vscode-focusBorder);
+  color: var(--vscode-foreground);
 }

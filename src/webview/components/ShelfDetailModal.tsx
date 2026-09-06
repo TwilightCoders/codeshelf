@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Shelf } from '../../shared/types';
-import { postMsg, collectProjects, sortProjects } from './helpers';
+import { postMsg, collectProjects, sortProjects, projectMatchesQuery } from './helpers';
 import { ProjectCard } from './ProjectCard';
 
 interface Props {
@@ -37,7 +37,7 @@ export function ShelfDetailModal({ shelf, onClose, onProjectClick, forgingPaths 
         </div>
         <div className="shelf-modal-grid">
           {projects.map(p => {
-            const match = !q || p.name.toLowerCase().includes(q);
+            const match = projectMatchesQuery(p, q);
             return (
               <div key={p.path} style={{ opacity: match ? 1 : 0.1, order: match ? 0 : 9999, pointerEvents: match ? 'auto' : 'none', transition: 'opacity 0.2s' }}>
                 <ProjectCard project={p} rootPath={shelf.rootPath} forging={forgingPaths.has(p.path)} onOpen={onProjectClick} />

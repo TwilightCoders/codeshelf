@@ -38,12 +38,17 @@ export function timeAgo(ms: number): string {
 }
 
 /**
- * Does a project match the query, by name or by its indexed doc corpus?
+ * Does a project match the query, by name, keyword tag, or indexed doc corpus?
  * `q` is expected already lowercased + trimmed (callers do this once).
+ *
+ * Tags are matched explicitly: they're rendered as chips on every card, so they
+ * read as a "click/type this to find it" affordance — searching one and getting
+ * nothing was the single most common way search felt broken.
  */
 export function projectMatchesQuery(p: Project, q: string): boolean {
   if (!q) return true;
   if (p.name.toLowerCase().includes(q)) return true;
+  if (p.tags?.some(t => t.toLowerCase().includes(q))) return true;
   return !!p.searchText && p.searchText.toLowerCase().includes(q);
 }
 
