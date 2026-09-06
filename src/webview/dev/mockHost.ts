@@ -64,7 +64,10 @@ function createMockShelves(): Shelf[] {
       name: 'vscode', path: '/mock/code/vscode', rootLabel: 'Code', rootPath: '/mock/code',
       items: [
         { kind: 'project', project: { name: 'termkit', path: '/mock/code/vscode/termkit', markers: ['.git', 'package.json'], primaryLanguage: 'javascript', gitBranch: 'main', lastModified: Date.now() - 3_600_000 } },
-        { kind: 'project', project: { name: 'startpage', path: '/mock/code/vscode/startpage', markers: ['.git', 'package.json'], primaryLanguage: 'javascript', gitBranch: 'react-migration', lastModified: Date.now() - 600_000, workspaceFile: '/mock/code/vscode/startpage/startpage.code-workspace' } },
+        { kind: 'project', project: { name: 'startpage', path: '/mock/code/vscode/startpage', markers: ['.git', 'package.json'], primaryLanguage: 'javascript', gitBranch: 'react-migration', lastModified: Date.now() - 600_000, workspaceFile: '/mock/code/vscode/startpage/startpage.code-workspace', worktrees: [
+          { name: 'wt-cards', path: '/mock/code/vscode/startpage-worktrees/cards', gitBranch: 'feature/card-deck', lastModified: Date.now() - DAY },
+          { name: 'wt-search', path: '/mock/code/vscode/startpage-worktrees/search', gitBranch: 'feature/content-search', lastModified: Date.now() - DAY * 2 },
+        ] } },
       ],
     },
     {

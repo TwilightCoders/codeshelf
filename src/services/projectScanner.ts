@@ -4,8 +4,8 @@ import {
   PROJECT_MARKERS, GLOB_MARKERS, SKIP_DIRS,
   LANGUAGE_PRIORITY, UMBRELLA_MARKERS,
 } from '../shared/constants';
-import { Project, Shelf, ShelfItem, ProjectItem, RootsConfig, RootConfig, ShelfMeta, ProjectMeta } from '../shared/types';
-import { getBranch } from './gitInfo';
+import { Project, Shelf, ShelfItem, ProjectItem, RootsConfig, RootConfig, ShelfMeta, ProjectMeta, Worktree } from '../shared/types';
+import { getBranch, branchFromGitDir } from './gitInfo';
 import { parseWorkspaceFile, WorkspaceInfo } from './workspaceFile';
 import { buildSearchText, applyTfIdfTags } from './projectIndex';
 
@@ -48,6 +48,52 @@ async function isWorktree(dir: string): Promise<boolean> {
   }
 }
 
+// A worktree collected during the scan, tagged with the main repo it belongs to
+// so it can be attached to that project's deck after all projects are known.
+interface CollectedWorktree {
+  parentPath: string;
+  worktree: Worktree;
+}
+
+/**
+ * If `dir` is a git WORKTREE (its `.git` is a file pointing into another repo's
+ * `.git/worktrees/<name>/`), return the main repo's working-dir path and the
+ * worktree's git metadata dir. Returns undefined for normal repos AND for
+ * submodules (whose gitdir points into `.git/modules/`, not `.git/worktrees/`).
+ */
+async function parseWorktree(dir: string): Promise<{ parentPath: string; gitDir: string } | undefined> {
+  const content = await fs.promises.readFile(path.join(dir, '.git'), 'utf-8').catch(() => '');
+  const m = /gitdir:\s*(.+)/.exec(content);
+  if (!m) return undefined;
+  const gitDir = m[1].trim();
+  const marker = '/.git/worktrees/';
+  const idx = gitDir.indexOf(marker);
+  if (idx === -1) return undefined;
+  return { parentPath: gitDir.slice(0, idx), gitDir };
+}
+
+/** Build a Worktree record (branch resolved from the worktree's own HEAD). */
+async function buildWorktree(dir: string, gitDir: string): Promise<Worktree> {
+  const [stat, gitBranch] = await Promise.all([
+    fs.promises.stat(dir).catch(() => undefined),
+    branchFromGitDir(gitDir),
+  ]);
+  return { name: path.basename(dir), path: dir, gitBranch, lastModified: stat?.mtimeMs ?? 0 };
+}
+
+/**
+ * If `dir` is a git worktree, record it on `collector` (tagged with its parent
+ * repo) and return true so the caller skips it — a worktree is never its own
+ * card. `entryNames` lets us avoid touching the fs when there is no `.git`.
+ */
+async function collectIfWorktree(dir: string, entryNames: string[], collector: CollectedWorktree[]): Promise<boolean> {
+  if (!entryNames.includes('.git')) return false;
+  const wt = await parseWorktree(dir);
+  if (!wt) return false;
+  collector.push({ parentPath: wt.parentPath, worktree: await buildWorktree(dir, wt.gitDir) });
+  return true;
+}
+
 // Detect project markers in a directory. The caller may pass the directory's
 // entry names (it usually already read them) to avoid a redundant readdir;
 // otherwise they are read here. File markers are resolved by set membership —
@@ -68,6 +114,108 @@ async function detectMarkers(dir: string, entries?: string[]): Promise<string[]>
     if (names.some(e => e.endsWith(ext))) found.push(pattern);
   }
   return found;
+}
+
+/**
+ * ── Directory classification ──────────────────────────────────────────────
+ *
+ * The git repository boundary is the ground truth for coupling: things that are
+ * versioned together are one project; things versioned separately are
+ * independent. That single observable yields the three layer kinds, at any depth
+ * and for any organic folder structure:
+ *
+ *   project   — the directory IS a repo (or declares itself one). Its
+ *               marker-bearing children are components, so we do not recurse.
+ *               `platform/` (one repo, 13 component dirs) is one card.
+ *   category  — not a repo, but its children ARE projects. A shelf.
+ *               `vscode/`, `Gems/`, `Games/` (independent repos side by side).
+ *   grouping  — not a repo and no project children, but projects live deeper.
+ *               Recurse. `Plugins/`, `Archive/`, and the roots themselves.
+ *
+ * This subsumes machinery that used to be special-cased: a monorepo with one
+ * `.git` is a super-project for free, so umbrella markers become a mere
+ * declaration rather than the mechanism.
+ */
+export type DirKind = 'project' | 'category' | 'grouping' | 'empty';
+
+/** A real repo — worktrees have `.git` as a FILE and are handled elsewhere. */
+async function isRepo(dir: string, entryNames: string[]): Promise<boolean> {
+  if (!entryNames.includes('.git')) return false;
+  try {
+    return (await fs.promises.stat(path.join(dir, '.git'))).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/** An explicit `.codeshelf` declaration, which outranks every inferred signal. */
+async function readDeclaration(dir: string, entryNames: string[]): Promise<DirKind | undefined> {
+  if (!entryNames.includes('.codeshelf')) return undefined;
+  const raw = await fs.promises.readFile(path.join(dir, '.codeshelf'), 'utf-8').catch(() => '');
+  const m = /^\s*kind\s*:\s*(project|category)\s*$/mi.exec(raw);
+  return m ? (m[1].toLowerCase() as DirKind) : undefined;
+}
+
+/** Cheap, NON-recursive "does this look like a project at all?" — used to count
+ *  a directory's project children without descending the whole tree. */
+async function looksLikeProject(dir: string, entryNames: string[]): Promise<boolean> {
+  if (await isRepo(dir, entryNames)) return true;
+  if (detectUmbrellaMarkers(entryNames).length > 0) return true;
+  return (await detectMarkers(dir, entryNames)).length > 0;
+}
+
+/** How many immediate child directories look like projects. Stops at `cap`. */
+async function countProjectChildren(dir: string, entryNames: string[], cap = 2): Promise<number> {
+  let n = 0;
+  for (const name of entryNames) {
+    if (name.startsWith('.') || SKIP_DIRS.has(name)) continue;
+    const child = path.join(dir, name);
+    let childNames: string[];
+    try {
+      if (!(await fs.promises.stat(child)).isDirectory()) continue;
+      childNames = await fs.promises.readdir(child);
+    } catch {
+      continue;
+    }
+    if (await looksLikeProject(child, childNames) && ++n >= cap) return n;
+  }
+  return n;
+}
+
+/**
+ * Is this directory ONE project? Precedence: explicit declaration > repo
+ * boundary > umbrella declaration > marker-that-isn't-outvoted.
+ *
+ * The last clause is what keeps a stray marker from swallowing a category: a
+ * `*.code-workspace` dropped on a folder purely to set a window title, or a
+ * build `Makefile` sitting beside several independent repos, must not stop
+ * recursion. A `.git` directory always wins, because that IS the coupling
+ * boundary.
+ */
+export async function isProjectDir(dir: string, entryNames: string[]): Promise<boolean> {
+  const declared = await readDeclaration(dir, entryNames);
+  if (declared) return declared === 'project';
+  if (await isRepo(dir, entryNames)) return true;
+  if (detectUmbrellaMarkers(entryNames).length > 0) return true;
+  if ((await detectMarkers(dir, entryNames)).length === 0) return false;
+  return (await countProjectChildren(dir, entryNames)) < 2;
+}
+
+/** Full three-way classification. Exported for tests and tooling. */
+export async function classifyDirectory(dir: string, entryNames?: string[]): Promise<DirKind> {
+  const names = entryNames ?? await fs.promises.readdir(dir).catch((): string[] => []);
+  if (await isProjectDir(dir, names)) return 'project';
+  if (await countProjectChildren(dir, names, 1) >= 1) return 'category';
+  for (const name of names) {
+    if (name.startsWith('.') || SKIP_DIRS.has(name)) continue;
+    const child = path.join(dir, name);
+    try {
+      if (!(await fs.promises.stat(child)).isDirectory()) continue;
+      const childNames = await fs.promises.readdir(child);
+      if (await countProjectChildren(child, childNames, 1) >= 1) return 'grouping';
+    } catch { /* unreadable child */ }
+  }
+  return 'empty';
 }
 
 // Umbrella markers present in a directory (monorepo / multi-service roots that
@@ -179,9 +327,9 @@ interface ScanResult {
 async function scanDirectory(
   dir: string,
   maxDepth: number,
-  shelfMeta?: ShelfMeta,
+  shelfMeta: ShelfMeta | undefined,
+  collector: CollectedWorktree[],
   currentDepth: number = 0,
-  namePrefix: string = '',
 ): Promise<ScanResult> {
   const projects: Project[] = [];
   const groups: ScanResult['groups'] = [];
@@ -210,47 +358,38 @@ async function scanDirectory(
     const dirents = await fs.promises.readdir(subdir, { withFileTypes: true }).catch((): fs.Dirent[] => []);
     const entryNames = dirents.map(d => d.name);
 
+    // A git worktree is a secondary checkout — collect it onto its parent's
+    // deck and skip it entirely (no card, no recursion).
+    if (await collectIfWorktree(subdir, entryNames, collector)) return local;
+
     const wsInfo = await parseWorkspaceFile(subdir, entryNames);
-    const wsItems = await tryWorkspaceBookset(subdir, wsInfo, shelfMeta);
-    if (wsItems) {
-      const groupName = namePrefix ? `${namePrefix}/${path.basename(subdir)}` : path.basename(subdir);
-      local.groups.push({ name: groupName, path: subdir, projects: wsItems.map(i => i.project) });
+
+    if (await isProjectDir(subdir, entryNames)) {
+      // One project — its marker-bearing children are components, not cards.
+      const markers = await detectMarkers(subdir, entryNames);
+      const pMeta = resolveProjectMeta(subdir, shelfMeta);
+      if (!pMeta?.hidden) {
+        const effective = markers.length > 0 ? markers : detectUmbrellaMarkers(entryNames);
+        local.projects.push(await buildProject(subdir, effective, pMeta, wsInfo, entryNames));
+      }
       return local;
     }
 
-    const markers = await detectMarkers(subdir, entryNames);
-    const umbrella = markers.length > 0 ? [] : detectUmbrellaMarkers(entryNames);
-    if (markers.length > 0 || umbrella.length > 0) {
-      // Regular markers → individual project; otherwise umbrella markers → a
-      // single "super-project" card (do NOT recurse into its sub-projects).
-      const pMeta = resolveProjectMeta(subdir, shelfMeta);
-      if (!pMeta?.hidden) {
-        const project = await buildProject(subdir, markers.length > 0 ? markers : umbrella, pMeta, wsInfo, entryNames);
-        // Apply collapsed name prefix if we're inside a single-child chain
-        if (namePrefix) {
-          project.name = `${namePrefix}/${project.name}`;
-        }
-        local.projects.push(project);
-      }
-    } else if (currentDepth < maxDepth) {
-      // Single-child collapse — reuse the dirents already read above.
-      const childDirs = dirents.filter(e => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.'));
-      const subdirName = namePrefix ? `${namePrefix}/${path.basename(subdir)}` : path.basename(subdir);
+    const wsItems = await tryWorkspaceBookset(subdir, wsInfo, shelfMeta);
+    if (wsItems) {
+      local.groups.push({ name: path.basename(subdir), path: subdir, projects: wsItems.map(i => i.project) });
+      return local;
+    }
 
-      if (childDirs.length === 1) {
-        // Single-child collapse: recurse deeper with concatenated name
-        const nested = await scanDirectory(subdir, maxDepth, shelfMeta, currentDepth + 1, subdirName);
-        local.projects.push(...nested.projects);
-        local.groups.push(...nested.groups);
-      } else {
-        const nested = await scanDirectory(subdir, maxDepth, shelfMeta, currentDepth + 1);
-        if (nested.projects.length > 0 || nested.groups.length > 0) {
-          const allProjects = [
-            ...nested.projects,
-            ...nested.groups.flatMap(g => g.projects),
-          ];
-          local.groups.push({ name: subdirName, path: subdir, projects: allProjects });
-        }
+    if (currentDepth < maxDepth) {
+      // Category or grouping → recurse. A nested category becomes a bookset in
+      // the parent shelf; names are NOT prefixed (the shelf/bookset already
+      // carries the context, and prefixing produced things like
+      // "Harbor-worktrees/agent-a3c09…").
+      const nested = await scanDirectory(subdir, maxDepth, shelfMeta, collector, currentDepth + 1);
+      if (nested.projects.length > 0 || nested.groups.length > 0) {
+        const allProjects = [...nested.projects, ...nested.groups.flatMap(g => g.projects)];
+        local.groups.push({ name: path.basename(subdir), path: subdir, projects: allProjects });
       }
     }
     return local;
@@ -264,70 +403,42 @@ async function scanDirectory(
   return { projects, groups };
 }
 
-// ── Recursive rollup heuristic ──
-// If a group (bookset) has ≤threshold total projects, flatten it:
-// prefix each project name with the group name and push up to the parent.
-// Works bottom-up recursively through the tree.
+/**
+ * Guarantee each project appears exactly once across all shelves.
+ *
+ * A `.code-workspace` may list folders living anywhere on disk — platform's
+ * names `../Gems/widgets`, `../lib` and `../../elsewhere/tool` — so a
+ * project surfaced as part of a workspace bookset can also be discovered in its
+ * real home. Ownership goes to the shelf that physically contains the project;
+ * anything left over falls to its first occurrence.
+ */
+function dedupeProjects(shelves: Shelf[]): void {
+  const projectsOf = (shelf: Shelf): Project[] =>
+    shelf.items.flatMap(i => (i.kind === 'project' ? [i.project] : i.projects));
+  const isHome = (shelf: Shelf, p: Project) =>
+    p.path === shelf.path || p.path.startsWith(shelf.path + path.sep);
 
-export const ROLLUP_THRESHOLD = 3;
-
-export function rollupItems(items: ShelfItem[]): ShelfItem[] {
-  const result: ShelfItem[] = [];
-
-  for (const item of items) {
-    if (item.kind === 'project') {
-      result.push(item);
-    } else {
-      // It's a bookset — check if it should be rolled up
-      if (item.projects.length <= ROLLUP_THRESHOLD) {
-        // Roll up: prefix each project name with the bookset name
-        for (const p of item.projects) {
-          result.push({
-            kind: 'project',
-            project: { ...p, name: `${item.name}/${p.name}` },
-          });
-        }
-      } else {
-        // Keep as bookset
-        result.push(item);
-      }
-    }
+  const owner = new Map<string, Shelf>();
+  for (const shelf of shelves) {
+    for (const p of projectsOf(shelf)) if (isHome(shelf, p) && !owner.has(p.path)) owner.set(p.path, shelf);
+  }
+  for (const shelf of shelves) {
+    for (const p of projectsOf(shelf)) if (!owner.has(p.path)) owner.set(p.path, shelf);
   }
 
-  return result;
-}
-
-// After rolling up booksets, check if the entire shelf is small enough
-// to be absorbed into the loose projects row.
-// Returns null if should be absorbed, or the items if it should stay as a shelf.
-export function rollupShelf(
-  items: ShelfItem[],
-  shelfName: string,
-  hasExplicitMeta: boolean,
-): { keep: true; items: ShelfItem[] } | { keep: false; looseProjects: ShelfItem[] } {
-  // First, recursively roll up small booksets
-  const rolled = rollupItems(items);
-
-  // Count total projects after rollup
-  const totalProjects = rolled.reduce((n, item) =>
-    n + (item.kind === 'project' ? 1 : item.projects.length), 0);
-
-  // If still small and no explicit metadata, absorb into loose projects
-  if (totalProjects <= ROLLUP_THRESHOLD && !hasExplicitMeta) {
-    const loose: ShelfItem[] = [];
-    for (const item of rolled) {
-      if (item.kind === 'project') {
-        loose.push({ kind: 'project', project: { ...item.project, name: `${shelfName}/${item.project.name}` } });
-      } else {
-        for (const p of item.projects) {
-          loose.push({ kind: 'project', project: { ...p, name: `${shelfName}/${p.name}` } });
-        }
-      }
-    }
-    return { keep: false, looseProjects: loose };
+  const emitted = new Set<string>();
+  const claim = (shelf: Shelf, p: Project) => {
+    if (owner.get(p.path) !== shelf || emitted.has(p.path)) return false;
+    emitted.add(p.path);
+    return true;
+  };
+  for (const shelf of shelves) {
+    shelf.items = shelf.items.flatMap((item): ShelfItem[] => {
+      if (item.kind === 'project') return claim(shelf, item.project) ? [item] : [];
+      const kept = item.projects.filter(p => claim(shelf, p));
+      return kept.length > 0 ? [{ ...item, projects: kept }] : [];
+    });
   }
-
-  return { keep: true, items: rolled };
 }
 
 // ── Main scan ──
@@ -337,6 +448,8 @@ export async function scanRoots(
   scanDepth: number,
 ): Promise<Shelf[]> {
   const shelves: Shelf[] = [];
+  // Worktrees found anywhere in the scan, attached to their parent projects at the end.
+  const collectedWorktrees: CollectedWorktree[] = [];
 
   const allRootPaths = new Set<string>();
   for (const root of Object.keys(rootsConfig)) {
@@ -368,17 +481,34 @@ export async function scanRoots(
       // Read the top dir's entries once; reuse for the workspace-file lookup and
       // marker detection (the recurse branch re-reads with file types itself).
       const topEntryNames = await fs.promises.readdir(topDir.path).catch((): string[] => []);
+
+      // A top-level dir that is itself a git worktree → collect onto its parent, skip.
+      if (await collectIfWorktree(topDir.path, topEntryNames, collectedWorktrees)) continue;
+
       const topWsInfo = await parseWorkspaceFile(topDir.path, topEntryNames);
+
+      // The repo boundary outranks the workspace-as-bookset heuristic: a
+      // directory that IS a project is one card, full stop. Otherwise a repo
+      // shipping a multi-folder `.code-workspace` would be exploded into a
+      // bookset of whatever that file happens to list — including paths outside
+      // the tree (platform's lists `../Gems/widgets` and `../../elsewhere/…`),
+      // which duplicates projects discovered in their real home.
+      if (await isProjectDir(topDir.path, topEntryNames)) {
+        const topMarkers = await detectMarkers(topDir.path, topEntryNames);
+        const pMeta = resolveProjectMeta(topDir.path, shelfMeta);
+        if (!pMeta?.hidden) {
+          const effective = topMarkers.length > 0 ? topMarkers : detectUmbrellaMarkers(topEntryNames);
+          looseProjects.push({ kind: 'project', project: await buildProject(topDir.path, effective, pMeta, topWsInfo, topEntryNames) });
+        }
+        continue;
+      }
 
       // Check for workspace-as-bookset at the shelf level
       const wsItems = await tryWorkspaceBookset(topDir.path, topWsInfo, shelfMeta);
       if (wsItems) {
         // Multi-folder workspace — run through rollup like any other shelf
-        const hasExplicitMeta = shelfMeta && Object.keys(shelfMeta).length > 0;
-        const rollupResult = rollupShelf(wsItems, topDir.name, !!hasExplicitMeta);
-        if (!rollupResult.keep) {
-          looseProjects.push(...rollupResult.looseProjects);
-        } else {
+        {
+          const finalItems: ShelfItem[] = wsItems;
           shelves.push({
             name: shelfMeta?.name ?? topDir.name,
             path: topDir.path,
@@ -387,27 +517,14 @@ export async function scanRoots(
             starred: shelfMeta?.starred,
             hidden: shelfMeta?.hidden,
             flatten: shelfMeta?.flatten,
-            items: rollupResult.items,
+            items: finalItems,
           });
         }
         continue;
       }
 
-      // Check if it's a regular project, or a single super-project (umbrella
-      // markers, e.g. a monorepo root with no regular marker of its own).
-      const topMarkers = await detectMarkers(topDir.path, topEntryNames);
-      const topUmbrella = topMarkers.length > 0 ? [] : detectUmbrellaMarkers(topEntryNames);
-      if (topMarkers.length > 0 || topUmbrella.length > 0) {
-        const pMeta = resolveProjectMeta(topDir.path, shelfMeta);
-        if (!pMeta?.hidden) {
-          const project = await buildProject(topDir.path, topMarkers.length > 0 ? topMarkers : topUmbrella, pMeta, topWsInfo, topEntryNames);
-          looseProjects.push({ kind: 'project', project });
-        }
-        continue;
-      }
-
       // Not a project — scan deeper
-      const result = await scanDirectory(topDir.path, scanDepth - 1, shelfMeta);
+      const result = await scanDirectory(topDir.path, scanDepth - 1, shelfMeta, collectedWorktrees);
       const items: ShelfItem[] = [];
 
       for (const project of result.projects) {
@@ -423,15 +540,13 @@ export async function scanRoots(
       }
 
       if (items.length > 0) {
-        const hasExplicitMeta = shelfMeta && Object.keys(shelfMeta).length > 0;
-        const rollupResult = rollupShelf(items, topDir.name, !!hasExplicitMeta);
-
-        if (!rollupResult.keep) {
-          // Absorbed into loose projects
-          looseProjects.push(...rollupResult.looseProjects);
-        } else {
-          // Keep as its own shelf (with booksets already rolled up)
-          const finalItems = rollupResult.items;
+        {
+          // A category is a shelf, at whatever size. Small ones render compact
+          // and sit side by side (`.root-shelves` is a wrapping flex row), which
+          // is what the old ≤3 rollup was approximating — except that rollup
+          // also renamed the projects and tipped them into a synthetic
+          // "Projects" heap, which is exactly what made placement feel arbitrary.
+          const finalItems = items;
           finalItems.sort((a, b) => {
             if (a.kind !== b.kind) return a.kind === 'bookset' ? -1 : 1;
             if (a.kind === 'project' && b.kind === 'project') return b.project.lastModified - a.project.lastModified;
@@ -463,8 +578,12 @@ export async function scanRoots(
       // The synthetic "Projects" shelf is addressable for star/hide too — its
       // path is the root itself, so resolve meta keyed by the root's basename.
       const looseMeta = resolveShelfMeta(expandedRoot, rootConfig);
+      // A real directory can also be called "Projects" (a typical workspace has
+      // one), which would put two identically-titled shelves in the same root.
+      const takenNames = new Set(shelves.filter(sh => sh.rootPath === expandedRoot).map(sh => sh.name));
+      const looseName = takenNames.has('Projects') ? 'Loose Projects' : 'Projects';
       shelves.push({
-        name: 'Projects',
+        name: looseName,
         path: expandedRoot,
         rootLabel,
         rootPath: expandedRoot,
@@ -477,6 +596,9 @@ export async function scanRoots(
 
   // With every project indexed, weight each one's candidate terms by rarity
   // across the whole library (TF-IDF) to pick distinctive tags; strips tagCounts.
+  // Exactly one card per project, before tags are weighted across the library.
+  dedupeProjects(shelves);
+
   const allProjects: Project[] = [];
   for (const shelf of shelves) {
     for (const item of shelf.items) {
@@ -484,6 +606,20 @@ export async function scanRoots(
       else allProjects.push(...item.projects);
     }
   }
+
+  // Attach collected worktrees to their parent project's deck (orphans whose main
+  // repo is outside the scanned roots are simply dropped — never shown as cards).
+  if (collectedWorktrees.length > 0) {
+    const byPath = new Map(allProjects.map(p => [p.path, p]));
+    for (const { parentPath, worktree } of collectedWorktrees) {
+      const parent = byPath.get(parentPath);
+      if (parent) (parent.worktrees ??= []).push(worktree);
+    }
+    for (const p of allProjects) {
+      if (p.worktrees) p.worktrees.sort((a, b) => b.lastModified - a.lastModified);
+    }
+  }
+
   applyTfIdfTags(allProjects);
 
   return shelves;

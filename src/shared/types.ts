@@ -1,3 +1,12 @@
+/** A git worktree (secondary checkout) of a project. Worktrees are never shown
+ *  as their own cards — they're collected onto their parent project as a deck. */
+export interface Worktree {
+  name: string;
+  path: string;
+  gitBranch?: string;
+  lastModified: number;
+}
+
 export interface Project {
   name: string;
   path: string;
@@ -10,6 +19,8 @@ export interface Project {
   description?: string;
   workspaceFile?: string;
   starred?: boolean;
+  // Git worktrees of this project (rendered as a stacked deck, not separate cards).
+  worktrees?: Worktree[];
   // Capped, cleaned text corpus (README excerpt + manifest blurb) the search
   // matches against, so a project can be found by what it is, not just its name.
   searchText?: string;

@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import type { Project } from '../../shared/types';
 import { postMsg, LANGUAGE_ICONS, LANGUAGE_COLORS, hashColor, timeAgo } from './helpers';
 
@@ -28,9 +28,12 @@ export const ProjectCard = memo(function ProjectCard({ project, rootPath, forgin
   const badge = lang ? LANGUAGE_ICONS[lang] ?? lang.slice(0, 2).toUpperCase() : '';
   const hasPoster = !!project.poster;
   const opacity = staleFade ? stalenessOpacity(project.lastModified) : 1;
+  const worktrees = project.worktrees ?? [];
+  const isDeck = worktrees.length > 0;
+  const [showWorktrees, setShowWorktrees] = useState(false);
 
   return (
-    <div className={`project-card ${hasPoster ? 'has-poster' : ''} ${forging ? 'forging' : ''} ${isNew ? 'new-project' : ''}`}
+    <div className={`project-card ${hasPoster ? 'has-poster' : ''} ${forging ? 'forging' : ''} ${isNew ? 'new-project' : ''} ${isDeck ? 'is-deck' : ''}`}
       title={project.path} onClick={() => onOpen(project.path)} role="button" tabIndex={0} aria-label={`Open ${project.name}`}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(project.path); } }}
       style={{ opacity, transition: 'opacity 0.3s ease' }}>
@@ -40,6 +43,11 @@ export const ProjectCard = memo(function ProjectCard({ project, rootPath, forgin
         </div>
         {hasPoster && <div className="card-poster-face card-poster-image" dangerouslySetInnerHTML={{ __html: project.poster! }} />}
       </div>
+      {isDeck && (
+        <span className="card-deck-badge" title={`${worktrees.length} worktree${worktrees.length > 1 ? 's' : ''}`}>
+          <i className="codicon codicon-git-branch" />{worktrees.length}
+        </span>
+      )}
       <div className="card-overlay">
         <button className={`action-btn star-btn ${project.starred ? 'starred' : ''}`} title="Star" onClick={e => { e.stopPropagation(); postMsg({ type: 'item:star', path: project.path, rootPath, starred: !project.starred, kind: 'project' }); }}>
           <i className={`codicon codicon-star-${project.starred ? 'full' : 'empty'}`} />
@@ -68,6 +76,28 @@ export const ProjectCard = memo(function ProjectCard({ project, rootPath, forgin
         {project.tags && project.tags.length > 0 && (
           <div className="card-tags">
             {project.tags.slice(0, 4).map(t => <span key={t} className="card-tag">{t}</span>)}
+          </div>
+        )}
+        {isDeck && (
+          <div className="card-worktrees">
+            <button className="worktree-toggle" aria-expanded={showWorktrees}
+              title={`${worktrees.length} worktree${worktrees.length > 1 ? 's' : ''}`}
+              onClick={e => { e.stopPropagation(); setShowWorktrees(v => !v); }}>
+              <i className={`codicon codicon-chevron-${showWorktrees ? 'down' : 'right'}`} />
+              <i className="codicon codicon-git-branch" /> {worktrees.length} worktree{worktrees.length > 1 ? 's' : ''}
+            </button>
+            {showWorktrees && (
+              <ul className="worktree-list">
+                {worktrees.map(w => (
+                  <li key={w.path}>
+                    <button className="worktree-item" title={`Open ${w.path}`}
+                      onClick={e => { e.stopPropagation(); postMsg({ type: 'project:open', path: w.path }); }}>
+                      <i className="codicon codicon-git-branch" /> {w.gitBranch ?? w.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </div>
