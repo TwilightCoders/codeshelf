@@ -16,10 +16,9 @@ interface Props {
   onShelfClick: (shelf: Shelf) => void;
 }
 
-// The bed is 12 columns; a shelf never shrinks below a quarter of it, or a long
-// shelf name ends up wrapping in a sliver of a cell.
 const COLUMNS = 12;
-const MIN_SPAN = 3;
+const MIN_SPAN = 2;  // absolute floor; the real floor is the shelf's own title
+const SLACK = 4;     // a hair of room so a title never lands exactly on the edge
 
 export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy, staleFade, newPaths, onProjectClick, onShelfClick }: Props) {
   const [collapsed, setCollapsed] = useState(false);
@@ -28,6 +27,8 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy,
   const [hiddenCount, setHiddenCount] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const lastBedWidth = useRef(-1);
   const [inline, setInline] = useState(false);
 
   // Filtering. The global query and this shelf's own inline filter are
@@ -82,30 +83,60 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy,
         setInline(false);
         return;
       }
-      const cs = getComputedStyle(section);
       const bedCs = getComputedStyle(bed);
-      const cardW = parseFloat(cs.getPropertyValue('--card-w')) || 156;
-      const colGap = parseFloat(bedCs.columnGap) || 0;
-      // Card gap comes from the content grid, which may not exist yet.
-      const cardGap = contentRef.current ? parseFloat(getComputedStyle(contentRef.current).columnGap) || 0 : 0;
       const cols = bedCs.gridTemplateColumns.split(' ').filter(Boolean).length || COLUMNS;
+      const colGap = parseFloat(bedCs.columnGap) || 0;
       const bedW = bed.clientWidth;
+      if (!(bedW > 0)) return;
       const colW = (bedW - (cols - 1) * colGap) / cols;
       if (!(colW > 0)) return;
 
-      // Width the cards want, plus this shelf's own horizontal padding/border.
-      const chrome = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
-        + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
-      const want = projectCount * cardW + (projectCount - 1) * cardGap + chrome;
-      const needed = Math.ceil((want + colGap) / (colW + colGap));
-      const span = Math.max(MIN_SPAN, Math.min(cols, needed));
+      // Measure unconstrained. The shelf name is ellipsised once the cell is
+      // narrow, so reading it at the current width under-measures and the shelf
+      // would keep shrinking toward its own truncation.
+      section.style.gridColumn = `span ${cols}`;
+
+      const cs = getComputedStyle(section);
+      const cardW = parseFloat(cs.getPropertyValue('--card-w')) || 156;
+      const cardGap = contentRef.current ? parseFloat(getComputedStyle(contentRef.current).columnGap) || 0 : 0;
+      const cardsWant = projectCount * cardW + (projectCount - 1) * cardGap;
+
+      // The title row — name, the action buttons and the filter box — is the
+      // real minimum: a shelf may never be narrower than its own header.
+      const title = titleRef.current;
+      let titleWant = 0;
+      if (title) {
+        const tGap = parseFloat(getComputedStyle(title).columnGap) || 0;
+        const kids = Array.from(title.children);
+        titleWant = kids.reduce((w, k) => w + k.getBoundingClientRect().width, 0)
+          + tGap * Math.max(0, kids.length - 1);
+      }
+
+      // The padding and border a cell GAINS when it goes inline. Reading them off
+      // the element is wrong here: while we measure it is still a band, which has
+      // neither — and that missing ~26px is exactly what pushed a short title
+      // like "Navy" into an ellipsis once the cell appeared.
+      const cellPad = parseFloat(cs.getPropertyValue('--s4')) || 12;
+      const chrome = cellPad * 2 + 2 + SLACK;
+      const want = Math.max(cardsWant, titleWant) + chrome;
+      const span = Math.max(MIN_SPAN, Math.min(cols, Math.ceil((want + colGap) / (colW + colGap))));
       section.style.gridColumn = `span ${span}`;
       setInline(span < cols);
     };
 
+    // Only re-fit when the bed's WIDTH changes. Setting a span changes the bed's
+    // height, which would otherwise bounce the observer straight back in.
+    const onResize = () => {
+      const w = bed.clientWidth;
+      if (w === lastBedWidth.current) return;
+      lastBedWidth.current = w;
+      fit();
+    };
+
+    lastBedWidth.current = bed.clientWidth;
     fit();
     if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(fit);
+    const ro = new ResizeObserver(onResize);
     ro.observe(bed);
     return () => ro.disconnect();
   }, [projectCount, groups.length, collapsed]);
@@ -154,7 +185,7 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy,
 
   return (
     <section ref={sectionRef} className={`shelf-row ${collapsed ? 'collapsed' : ''} ${inline ? 'shelf-inline' : ''} ${shelf.starred ? 'starred-shelf' : ''}`}>
-      <h3 className="shelf-row-title">
+      <h3 ref={titleRef} className="shelf-row-title">
         <span className={`collapse-arrow ${collapsed ? 'collapsed' : ''}`} role="button" tabIndex={0}
           aria-expanded={!collapsed} aria-label={collapsed ? 'Expand shelf' : 'Collapse shelf'}
           onClick={() => setCollapsed(!collapsed)}

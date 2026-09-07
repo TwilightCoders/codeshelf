@@ -982,6 +982,24 @@ describe('inline shelf spanning', () => {
     expect(a.top).toBe(b.top);
   });
 
+  it('never shrinks a shelf below its own title row', async () => {
+    // The floor used to be a flat 3-of-12 columns. It is now the header's own
+    // width, so a long shelf name can't be squeezed into an ellipsis.
+    await page.evaluate(() => {
+      window.__mockHost?.injectShelves([{
+        name: 'Firmware Experiments From Years Ago', path: '/mock/long', rootLabel: 'Mock', rootPath: '/mock',
+        items: [{ kind: 'project' as const, project: { name: 'one', path: '/mock/long/p', markers: ['.git'], lastModified: Date.now() } }],
+      }]);
+    });
+    await new Promise(r => setTimeout(r, 600));
+    const t = await page.evaluate(() => {
+      const label = document.querySelector('.shelf-row-title')?.children[1] as HTMLElement | undefined;
+      return label ? { clientW: label.clientWidth, scrollW: label.scrollWidth } : null;
+    });
+    expect(t).not.toBeNull();
+    expect(t!.scrollW).toBeLessThanOrEqual(t!.clientW + 1); // not ellipsised
+  });
+
   it('keeps a shelf that cannot fit as a full-width band', async () => {
     await injectShelves([40]);
     const big = await shelfBox('S0');
