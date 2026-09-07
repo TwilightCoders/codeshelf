@@ -1,7 +1,7 @@
 src/**
 .vscode/**
 tsconfig*.json
-*.map
+**/*.map
 .gitignore
 .Codex/**
 .claude/**
@@ -18,5 +18,14 @@ esbuild.mjs
 # the codicons font/css (webview <link>) and `ignore` (host requires it at runtime;
 # webview deps like react are bundled by esbuild so they don't need to ship).
 node_modules/**
-!node_modules/@vscode/codicons/**
 !node_modules/ignore/**
+
+# Design/provenance docs and the dev workspace file aren't part of the product.
+docs/**
+*.code-workspace
+media/icon.svg
+
+# Codicons ships previews, build scripts and per-icon SVGs; the webview only
+# <link>s the stylesheet and its font.
+!node_modules/@vscode/codicons/dist/codicon.css
+!node_modules/@vscode/codicons/dist/codicon.ttf

@@ -4,13 +4,33 @@
   "description": "A Steam Library-style project browser for VS Code",
   "version": "0.1.0",
   "publisher": "twilightcoders",
+  "author": "Dale Stevens",
   "license": "MIT",
+  "icon": "media/icon.png",
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "project",
+    "browser",
+    "launcher",
+    "workspace",
+    "dashboard",
+    "start page",
+    "projects",
+    "git",
+    "monorepo",
+    "library"
+  ],
+  "galleryBanner": {
+    "color": "#15171c",
+    "theme": "dark"
+  },
+  "qna": false,
   "engines": {
     "vscode": "^1.108.0"
   },
-  "categories": [
-    "Other"
-  ],
   "activationEvents": [
     "onStartupFinished"
   ],

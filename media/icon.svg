@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#22262e"/>
+      <stop offset="1" stop-color="#15171c"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#bg)"/>
+  <!-- spines: the library, each a language colour, leaning like well-used books -->
+  <g>
+    <rect x="52"  y="72"  width="26" height="112" rx="6" fill="#e35d4f"/>
+    <rect x="86"  y="56"  width="26" height="128" rx="6" fill="#f0c419"/>
+    <rect x="120" y="86"  width="26" height="98"  rx="6" fill="#4ba3e3"/>
+    <g transform="rotate(12 168 184)">
+      <rect x="154" y="70" width="26" height="114" rx="6" fill="#7d5fd0"/>
+    </g>
+  </g>
+  <!-- the shelf -->
+  <rect x="40" y="188" width="176" height="14" rx="7" fill="#cfd4dc"/>
+  <rect x="40" y="188" width="176" height="6"  rx="3" fill="#ffffff" opacity=".35"/>
+</svg>
