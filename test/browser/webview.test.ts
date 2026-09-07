@@ -831,10 +831,14 @@ describe('large shelf overflow', () => {
     expect(h).toBeGreaterThan(150);
   });
 
-  it('offers "Show all N" and expands to reveal every card', async () => {
+  it('offers a "Show N more" toggle counting only what is hidden', async () => {
     await injectBigShelf(40);
-    expect(await page.evaluate(() => document.querySelector('.shelf-showmore')?.textContent ?? ''))
-      .toContain('Show all 40');
+    const label = await page.evaluate(() => document.querySelector('.shelf-showmore')?.textContent ?? '');
+    const hidden = Number(/Show (\d+) more/.exec(label)?.[1]);
+    expect(label).toMatch(/Show \d+ more/);
+    // Some cards fit on the first row, so the count is strictly less than the total.
+    expect(hidden).toBeGreaterThan(0);
+    expect(hidden).toBeLessThan(40);
     await page.evaluate(() => document.querySelector<HTMLElement>('.shelf-showmore')?.click());
     await new Promise(r => setTimeout(r, 300));
     const after = await page.evaluate(() => ({
@@ -845,8 +849,31 @@ describe('large shelf overflow', () => {
     expect(after.label).toBe('Show less');
   });
 
-  it('does not offer "Show all" for a shelf that already fits', async () => {
+  it('does not offer the toggle for a shelf that already fits', async () => {
     await injectBigShelf(2);
+    expect(await page.$('.shelf-showmore')).toBeNull();
+  });
+
+  it('does not offer the toggle when one card is taller than its row-mates', async () => {
+    // Regression: the check was `scrollHeight > clientHeight`, so a single card
+    // running a few px past a fixed height cap (e.g. one carrying a worktree
+    // row) made a fully-visible shelf advertise "Show all 4".
+    await page.evaluate(() => {
+      window.__mockHost?.injectShelves([{
+        name: 'Mixed', path: '/mock/mixed', rootLabel: 'Mock', rootPath: '/mock',
+        items: [0, 1, 2].map(i => ({
+          kind: 'project' as const,
+          project: {
+            name: `m-${i}`, path: `/mock/mixed/p${i}`, markers: ['.git'], lastModified: Date.now(),
+            tags: ['alpha', 'beta', 'gamma'],
+            // the first card is taller: it carries a worktree deck
+            ...(i === 0 ? { worktrees: [{ name: 'wt', path: '/mock/mixed/wt', gitBranch: 'feature/x', lastModified: Date.now() }] } : {}),
+          },
+        })),
+      }]);
+    });
+    await new Promise(r => setTimeout(r, 450));
+    expect(await page.$$('.project-card')).toHaveLength(3);
     expect(await page.$('.shelf-showmore')).toBeNull();
   });
 });

@@ -20,7 +20,7 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy,
   const [collapsed, setCollapsed] = useState(false);
   const [inlineFilter, setInlineFilter] = useState('');
   const [expanded, setExpanded] = useState(false);
-  const [overflowing, setOverflowing] = useState(false);
+  const [hiddenCount, setHiddenCount] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
 
   // Filtering. The global query and this shelf's own inline filter are
@@ -62,14 +62,38 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy,
   const isCompact = projectCount <= 3 && groups.length === 0;
   const showEmpty = projectCount === 0;
 
-  // Does the one-row preview clip anything? Drives the fade + "Show all".
+  // Size the collapsed preview to EXACTLY the first row, and count what that
+  // hides. Comparing scrollHeight to clientHeight only answered "is a pixel
+  // clipped?", so a shelf whose tallest card ran a few px past a fixed height
+  // cap advertised "Show all 4" while all four were plainly visible. Measuring
+  // the real first row also means no card is ever cut mid-body, whatever card
+  // height the stylesheet chooses.
   useLayoutEffect(() => {
     const el = contentRef.current;
-    if (!el) { setOverflowing(false); return; }
-    const check = () => setOverflowing(el.scrollHeight > el.clientHeight + 1);
-    check();
+    if (!el) { setHiddenCount(0); return; }
+
+    const measure = () => {
+      if (expanded) { el.style.maxHeight = ''; setHiddenCount(0); return; }
+      const rows = Array.from(el.children).filter((c): c is HTMLElement => c instanceof HTMLElement);
+      if (rows.length === 0) { el.style.maxHeight = ''; setHiddenCount(0); return; }
+      // Let the content size itself before reading offsets.
+      el.style.maxHeight = '';
+      const top = Math.min(...rows.map(r => r.offsetTop));
+      const firstRow = rows.filter(r => r.offsetTop <= top + 4);
+      const rest = rows.filter(r => r.offsetTop > top + 4);
+      const bottom = Math.max(...firstRow.map(r => r.offsetTop + r.offsetHeight));
+      const padBottom = parseFloat(getComputedStyle(el).paddingBottom) || 0;
+      // Projects hidden = everything below the first row (a bookset counts as
+      // the number of cards inside it, not as one item).
+      const hidden = rest.reduce((n, r) =>
+        n + (r.classList.contains('bookset') ? r.querySelectorAll('.project-card').length : 1), 0);
+      if (rest.length > 0) el.style.maxHeight = `${bottom - top + padBottom}px`;
+      setHiddenCount(hidden);
+    };
+
+    measure();
     if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(check);
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
   }, [collapsed, expanded, projectCount]);
@@ -108,7 +132,7 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy,
         </p>
       ) : (
         <>
-          <div ref={contentRef} className={`shelf-row-content ${expanded ? 'expanded' : ''} ${overflowing && !expanded ? 'has-overflow' : ''}`}>
+          <div ref={contentRef} className={`shelf-row-content ${expanded ? 'expanded' : ''} ${hiddenCount > 0 && !expanded ? 'has-overflow' : ''}`}>
             {groups.map(g => (
               <div key={g.path} className="bookset">
                 <div className="bookset-header">
@@ -126,9 +150,9 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy,
               <ProjectCard key={p.path} project={p} rootPath={shelf.rootPath} forging={forgingPaths.has(p.path)} staleFade={staleFade} isNew={newPaths.has(p.path)} onOpen={onProjectClick} />
             ))}
           </div>
-          {(overflowing || expanded) && (
+          {(hiddenCount > 0 || expanded) && (
             <button className="shelf-showmore" aria-expanded={expanded} onClick={() => setExpanded(v => !v)}>
-              {expanded ? 'Show less' : `Show all ${projectCount}`}
+              {expanded ? 'Show less' : `Show ${hiddenCount} more`}
             </button>
           )}
         </>
