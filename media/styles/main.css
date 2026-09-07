@@ -557,28 +557,33 @@ button {
   margin-right: var(--s0);
 }
 
-/* — Shelf actions: present but silent until the shelf is engaged ——— */
+/* — Shelf actions: always on ————————————————————————————————————
+   These were revealed on hover to quiet 25 shelves' worth of chrome, but a
+   control you cannot see is a control you do not know you have, and the filter
+   box in particular has to be findable before you think to look for it. They
+   stay at a low-contrast rest state and come up to full on hover instead. */
 
 .shelf-actions {
   display: flex;
   align-items: center;
   gap: var(--s0);
   margin-left: var(--s3);
-  opacity: 0;
-  transition: opacity var(--dur) var(--ease);
 }
-.shelf-row:hover .shelf-actions,
-.shelf-row:focus-within .shelf-actions { opacity: 1; }
-/* A starred shelf keeps its star visible at rest. */
-.starred-shelf .shelf-actions .star-btn.starred { opacity: 1; }
 
-/* An ACTIVE filter must never be invisible. Hiding the controls at rest is good
-   for noise, but a shelf silently filtered by text the user can no longer see is
-   the "my section disappeared" bug wearing a different hat — so a filter box
-   holding a value keeps itself, and its row, on screen. */
-.shelf-actions:has(.shelf-filter-input:not(:placeholder-shown)) { opacity: 1; }
+.shelf-actions .action-btn {
+  opacity: 0.55;
+  transition: opacity var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.shelf-row:hover .shelf-actions .action-btn,
+.shelf-row:focus-within .shelf-actions .action-btn,
+.shelf-actions .action-btn:hover,
+.shelf-actions .action-btn:focus-visible { opacity: 1; }
+
+/* A starred shelf keeps its star at full strength — it carries state. */
+.shelf-actions .star-btn.starred { opacity: 1; }
+
+/* An active filter is flagged so a narrowed shelf never looks merely empty. */
 .shelf-filter-input:not(:placeholder-shown) {
-  opacity: 1;
   border-color: var(--vscode-focusBorder);
 }
 
