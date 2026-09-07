@@ -935,3 +935,57 @@ describe('bookset rendering', () => {
     expect(await page.$('.bookset')).toBeNull();
   });
 });
+
+// ── Inline shelf spanning ──
+
+describe('inline shelf spanning', () => {
+  async function injectShelves(sizes: number[]) {
+    await page.evaluate(counts => {
+      window.__mockHost?.injectShelves(counts.map((n, s) => ({
+        name: `S${s}`, path: `/mock/s${s}`, rootLabel: 'Mock', rootPath: '/mock',
+        items: Array.from({ length: n }, (_, i) => ({
+          kind: 'project' as const,
+          project: { name: `s${s}-${i}`, path: `/mock/s${s}/p${i}`, markers: ['.git'], lastModified: Date.now() - i * 1000 },
+        })),
+      })));
+    }, sizes);
+    await new Promise(r => setTimeout(r, 600));
+  }
+
+  function shelfBox(name: string) {
+    return page.evaluate(n => {
+      const row = Array.from(document.querySelectorAll('.shelf-row'))
+        .find(r => r.querySelector('.shelf-row-title')?.textContent?.includes(n));
+      const bed = row?.parentElement;
+      const rb = row?.getBoundingClientRect();
+      return {
+        inline: row?.classList.contains('shelf-inline') ?? false,
+        width: rb ? Math.round(rb.width) : 0,
+        top: rb ? Math.round(rb.top) : 0,
+        bedWidth: bed ? Math.round(bed.getBoundingClientRect().width) : 0,
+      };
+    }, name);
+  }
+
+  it('lets a shelf that fits claim only the columns it needs', async () => {
+    await injectShelves([3, 3]);
+    const a = await shelfBox('S0');
+    expect(a.inline).toBe(true);
+    expect(a.width).toBeLessThan(a.bedWidth * 0.8);
+  });
+
+  it('flows two small shelves onto the same row instead of stacking them', async () => {
+    // This is the point: a 4-card shelf used to eat a full row and push the next
+    // shelf down, which is where the scrolling and whitespace came from.
+    await injectShelves([3, 3]);
+    const [a, b] = [await shelfBox('S0'), await shelfBox('S1')];
+    expect(a.top).toBe(b.top);
+  });
+
+  it('keeps a shelf that cannot fit as a full-width band', async () => {
+    await injectShelves([40]);
+    const big = await shelfBox('S0');
+    expect(big.inline).toBe(false);
+    expect(big.width).toBeGreaterThan(big.bedWidth * 0.95);
+  });
+});

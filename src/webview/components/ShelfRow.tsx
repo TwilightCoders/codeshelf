@@ -16,12 +16,19 @@ interface Props {
   onShelfClick: (shelf: Shelf) => void;
 }
 
+// The bed is 12 columns; a shelf never shrinks below a quarter of it, or a long
+// shelf name ends up wrapping in a sliver of a cell.
+const COLUMNS = 12;
+const MIN_SPAN = 3;
+
 export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy, staleFade, newPaths, onProjectClick, onShelfClick }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [inlineFilter, setInlineFilter] = useState('');
   const [expanded, setExpanded] = useState(false);
   const [hiddenCount, setHiddenCount] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const [inline, setInline] = useState(false);
 
   // Filtering. The global query and this shelf's own inline filter are
   // INDEPENDENT narrowing steps: they used to share one `q`, so a global search
@@ -59,7 +66,49 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy,
   const looseProjects = narrow(loose);
 
   const projectCount = looseProjects.length + groups.reduce((n, g) => n + g.projects.length, 0);
-  const isCompact = projectCount <= 3 && groups.length === 0;
+  // How wide does this shelf actually need to be? Spanning the full bed for a
+  // 4-card shelf left ~1000px empty and pushed everything else down a row, so
+  // instead each shelf claims only the columns its cards occupy and the bed's
+  // `dense` packing flows the rest in beside it. A shelf that needs the whole
+  // bed (or holds a bookset, which is a full-width block) stays a band.
+  useLayoutEffect(() => {
+    const section = sectionRef.current;
+    const bed = section?.parentElement;
+    if (!section || !bed) return;
+
+    const fit = () => {
+      if (groups.length > 0 || projectCount === 0) {
+        section.style.gridColumn = '';
+        setInline(false);
+        return;
+      }
+      const cs = getComputedStyle(section);
+      const bedCs = getComputedStyle(bed);
+      const cardW = parseFloat(cs.getPropertyValue('--card-w')) || 156;
+      const colGap = parseFloat(bedCs.columnGap) || 0;
+      // Card gap comes from the content grid, which may not exist yet.
+      const cardGap = contentRef.current ? parseFloat(getComputedStyle(contentRef.current).columnGap) || 0 : 0;
+      const cols = bedCs.gridTemplateColumns.split(' ').filter(Boolean).length || COLUMNS;
+      const bedW = bed.clientWidth;
+      const colW = (bedW - (cols - 1) * colGap) / cols;
+      if (!(colW > 0)) return;
+
+      // Width the cards want, plus this shelf's own horizontal padding/border.
+      const chrome = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
+        + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
+      const want = projectCount * cardW + (projectCount - 1) * cardGap + chrome;
+      const needed = Math.ceil((want + colGap) / (colW + colGap));
+      const span = Math.max(MIN_SPAN, Math.min(cols, needed));
+      section.style.gridColumn = `span ${span}`;
+      setInline(span < cols);
+    };
+
+    fit();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(fit);
+    ro.observe(bed);
+    return () => ro.disconnect();
+  }, [projectCount, groups.length, collapsed]);
   const showEmpty = projectCount === 0;
 
   // Size the collapsed preview to EXACTLY the first row, and count what that
@@ -104,7 +153,7 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy,
   if (showEmpty && !localQ) return null;
 
   return (
-    <section className={`shelf-row ${collapsed ? 'collapsed' : ''} ${isCompact ? 'shelf-compact' : ''} ${shelf.starred ? 'starred-shelf' : ''}`}>
+    <section ref={sectionRef} className={`shelf-row ${collapsed ? 'collapsed' : ''} ${inline ? 'shelf-inline' : ''} ${shelf.starred ? 'starred-shelf' : ''}`}>
       <h3 className="shelf-row-title">
         <span className={`collapse-arrow ${collapsed ? 'collapsed' : ''}`} role="button" tabIndex={0}
           aria-expanded={!collapsed} aria-label={collapsed ? 'Expand shelf' : 'Collapse shelf'}

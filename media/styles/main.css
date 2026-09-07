@@ -30,8 +30,9 @@
       scanning for "what's alive" is a vertical read down one column of numbers.
 
    4. Small shelves are cells, not rows. `.root-shelves` is a wrap-flex: full
-      shelves take 100%, `.shelf-compact` shelves shrink-to-fit and tile side by
-      side in bordered cells. 25 shelves stop being 25 full-bleed bands.
+      shelves span the whole bed; any shelf whose cards fit in fewer columns
+      claims only those and tiles side by side in a bordered cell. 25 shelves
+      stop being 25 full-bleed bands.
 
    5. Motion is short and only ever confirms an action. 160ms is the house
       duration; the one long move is the poster flip (520ms), because it is a
@@ -698,29 +699,27 @@ button {
 }
 .shelf-empty-clear:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 
-/* — Compact shelves: 1–3 projects, tiled as cells ————————————— */
+/* — Inline shelves: any shelf whose cards fit inside the bed ————————
+   The span itself is set from JS (ShelfRow measures how many columns the cards
+   actually occupy). Anything narrower than the full bed reads as a grouped
+   cell — the border is what says "these belong together" once a row can carry
+   several shelves side by side. */
 
-.shelf-row.shelf-compact {
-  /* A third of the bed: three tiny shelves per row instead of three bands. */
-  grid-column: span 4;
+.shelf-row.shelf-inline {
   padding: var(--s4);
   background: var(--surface-1);
   border: 1px solid var(--line-faint);
   border-radius: var(--r3);
 }
 
-/* A compact shelf holds 3 cards at most, so it never needs the clip/expand. */
-.shelf-row.shelf-compact .shelf-row-content {
-  max-height: none;
-  overflow: visible;
-  mask-image: none;
-}
-.shelf-compact > .shelf-row-title {
+.shelf-inline > .shelf-row-title {
   margin-bottom: var(--s3);
   font-size: var(--t-md);
   font-weight: 560;
 }
-.shelf-compact .shelf-row-content {
+
+/* An inline shelf is sized to hold every card, so it never clips or expands. */
+.shelf-inline .shelf-row-content {
   grid-template-columns: none;
   grid-auto-flow: column;
   grid-auto-columns: var(--card-w);
@@ -730,7 +729,8 @@ button {
   -webkit-mask-image: none;
   padding-right: var(--s1);
 }
-.shelf-compact.starred-shelf { border-color: color-mix(in srgb, var(--gold) 34%, transparent); }
+
+.shelf-inline.starred-shelf { border-color: color-mix(in srgb, var(--gold) 34%, transparent); }
 
 /* ==========================================================================
    7. BOOKSET
