@@ -6,6 +6,7 @@ import { postMsg, vscode, heatOf } from './components/helpers';
 import { asSortBy, projectMatchesQuery, type SortBy } from './components/pure';
 import { RootGroup } from './components/RootGroup';
 import { BenchStrip } from './components/BenchStrip';
+import { LanguageChips, languageCounts, langKey } from './components/LanguageChips';
 import { TimelineView } from './components/TimelineView';
 import { ShelfDetailModal } from './components/ShelfDetailModal';
 import { ProjectDetailModal } from './components/ProjectDetailModal';
@@ -50,11 +51,31 @@ function App() {
     const saved = (vscode.getState() as { view?: string } | null)?.view;
     return saved === 'workbench' || saved === 'timeline' ? saved : 'shelves';
   });
+  const [excludedLangs, setExcludedLangs] = useState<Set<string>>(() => {
+    const saved = (vscode.getState() as { excludedLangs?: unknown } | null)?.excludedLangs;
+    return new Set(Array.isArray(saved) ? saved.filter((x): x is string => typeof x === 'string') : []);
+  });
+  const persist = useCallback((patch: Record<string, unknown>) => {
+    const prev = (vscode.getState() as Record<string, unknown> | null) ?? {};
+    vscode.setState({ ...prev, ...patch });
+  }, []);
+  const toggleLang = useCallback((lang: string) => {
+    setExcludedLangs(prev => {
+      const next = new Set(prev);
+      if (!next.delete(lang)) next.add(lang);
+      persist({ excludedLangs: [...next] });
+      return next;
+    });
+  }, [persist]);
+  const resetLangs = useCallback(() => {
+    setExcludedLangs(new Set());
+    persist({ excludedLangs: [] });
+  }, [persist]);
+
   const changeView = useCallback((v: ViewMode) => {
     setView(v);
-    const prev = (vscode.getState() as Record<string, unknown> | null) ?? {};
-    vscode.setState({ ...prev, view: v });
-  }, []);
+    persist({ view: v });
+  }, [persist]);
   const [projectDetail, setProjectDetail] = useState<{ project: Project; rootPath: string } | null>(null);
   const [shelfDetail, setShelfDetail] = useState<Shelf | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -261,6 +282,7 @@ function App() {
         booksetThreshold={state.booksetThreshold} forgingPaths={state.forgingPaths}
         sortBy={sortBy} onSortChange={setSortBy} staleFade={staleFade} onStaleFadeToggle={() => setStaleFade(!staleFade)}
         view={view} onViewChange={changeView}
+        excludedLangs={excludedLangs} onToggleLang={toggleLang} onResetLangs={resetLangs}
         newPaths={newPaths}
         onProjectClick={openProjectDetail} onShelfClick={openShelfDetail}
       />
@@ -317,11 +339,12 @@ interface ShelfScreenProps {
   syncText: string; syncVisible: boolean; booksetThreshold: number; forgingPaths: Set<string>;
   sortBy: SortBy; onSortChange: (s: SortBy) => void; staleFade: boolean; onStaleFadeToggle: () => void;
   view: ViewMode; onViewChange: (v: ViewMode) => void;
+  excludedLangs: Set<string>; onToggleLang: (l: string) => void; onResetLangs: () => void;
   newPaths: Set<string>;
   onProjectClick: (path: string) => void; onShelfClick: (shelf: Shelf) => void;
 }
 
-function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisible, booksetThreshold, forgingPaths, sortBy, onSortChange, staleFade, onStaleFadeToggle, newPaths, view, onViewChange, onProjectClick, onShelfClick }: ShelfScreenProps) {
+function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisible, booksetThreshold, forgingPaths, sortBy, onSortChange, staleFade, onStaleFadeToggle, newPaths, view, onViewChange, excludedLangs, onToggleLang, onResetLangs, onProjectClick, onShelfClick }: ShelfScreenProps) {
   const q = searchQuery.toLowerCase().trim();
 
   // Every visible project, flat — what the Workbench bench strip and the
@@ -338,9 +361,18 @@ function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisib
     return out;
   }, [shelves]);
 
-  const matching = useMemo(
-    () => (q ? visibleProjects.filter(p => projectMatchesQuery(p, q)) : visibleProjects),
-    [visibleProjects, q]);
+  // Counts come from the search-narrowed set but IGNORE the language filter, so
+  // switching a language off doesn't make its own chip vanish.
+  const langCounts = useMemo(() => {
+    const base = q ? visibleProjects.filter(p => projectMatchesQuery(p, q)) : visibleProjects;
+    return languageCounts(base);
+  }, [visibleProjects, q]);
+
+  const matching = useMemo(() => {
+    let out = q ? visibleProjects.filter(p => projectMatchesQuery(p, q)) : visibleProjects;
+    if (excludedLangs.size > 0) out = out.filter(p => !excludedLangs.has(langKey(p)));
+    return out;
+  }, [visibleProjects, q, excludedLangs]);
 
   // "On the bench" = what is actually in flight. Anything cooler than a fortnight
   // is archive, so the strip stays empty rather than padding itself with stale
@@ -406,6 +438,8 @@ function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisib
         </div>
       </header>
       <div className={`shelf-content view-${view}`}>
+        <LanguageChips counts={langCounts} excluded={excludedLangs}
+          onToggle={onToggleLang} onReset={onResetLangs} />
         {view === 'timeline' ? (
           <TimelineView projects={matching} onOpen={onProjectClick} />
         ) : (<>
@@ -415,7 +449,7 @@ function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisib
           return (
             <RootGroup key={rootLabel} label={rootLabel} shelves={rootShelves} hiddenShelves={hidden}
               query={q} booksetThreshold={booksetThreshold} forgingPaths={forgingPaths}
-              sortBy={sortBy} staleFade={staleFade} newPaths={newPaths}
+              sortBy={sortBy} staleFade={staleFade} newPaths={newPaths} excludedLangs={excludedLangs}
               onProjectClick={onProjectClick} onShelfClick={onShelfClick} />
           );
         })}

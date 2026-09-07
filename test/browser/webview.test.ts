@@ -1069,3 +1069,56 @@ describe('view modes', () => {
     expect((await page.$$('.shelf-row')).length).toBeGreaterThan(0);
   });
 });
+
+// ── Language filter chips ──
+
+describe('language chips', () => {
+  const chipTexts = () => page.$$eval('.lang-chip', els => els.map(e => e.textContent ?? ''));
+  async function clickChip(lang: string) {
+    await page.evaluate(l => {
+      Array.from(document.querySelectorAll<HTMLElement>('.lang-chip'))
+        .find(c => (c.textContent ?? '').includes(l))?.click();
+    }, lang);
+    await new Promise(r => setTimeout(r, 400));
+  }
+
+  it('lists the languages present, most common first, with counts', async () => {
+    const texts = await chipTexts();
+    expect(texts.length).toBeGreaterThan(1);
+    expect(texts.some(t => t.includes('ruby'))).toBe(true);
+  });
+
+  it('switching a language off removes exactly its projects', async () => {
+    const before = (await page.$$('.project-card')).length;
+    const rubyCount = await page.evaluate(() => {
+      const shelves = window.__mockHost?.getShelves() ?? [];
+      let n = 0;
+      for (const s of shelves) {
+        if (s.hidden) continue;
+        for (const i of s.items) {
+          const ps = i.kind === 'project' ? [i.project] : i.projects;
+          n += ps.filter(p => p.primaryLanguage === 'ruby').length;
+        }
+      }
+      return n;
+    });
+    await clickChip('ruby');
+    expect((await page.$$('.project-card')).length).toBe(before - rubyCount);
+  });
+
+  it('keeps the chip visible once its language is off, so it can be undone', async () => {
+    await clickChip('ruby');
+    const off = await page.$$eval('.lang-chip.off', els => els.map(e => e.textContent ?? ''));
+    expect(off.some(t => t.includes('ruby'))).toBe(true);
+  });
+
+  it('"Show all" restores everything', async () => {
+    const before = (await page.$$('.project-card')).length;
+    await clickChip('ruby');
+    expect((await page.$$('.project-card')).length).toBeLessThan(before);
+    await page.evaluate(() => document.querySelector<HTMLElement>('.lang-reset')?.click());
+    await new Promise(r => setTimeout(r, 400));
+    expect((await page.$$('.project-card')).length).toBe(before);
+    expect(await page.$('.lang-chip.off')).toBeNull();
+  });
+});

@@ -1,6 +1,7 @@
 import { useState, useRef, useLayoutEffect } from 'react';
 import type { Shelf, Project, BooksetItem } from '../../shared/types';
 import { postMsg, sortProjects, projectMatchesQuery } from './helpers';
+import { langKey } from './pure';
 import type { SortBy } from './pure';
 import { ProjectCard } from './ProjectCard';
 
@@ -12,6 +13,7 @@ interface Props {
   sortBy: SortBy;
   staleFade: boolean;
   newPaths: Set<string>;
+  excludedLangs: Set<string>;
   onProjectClick: (path: string) => void;
   onShelfClick: (shelf: Shelf) => void;
 }
@@ -20,7 +22,7 @@ const COLUMNS = 12;
 const MIN_SPAN = 2;  // absolute floor; the real floor is the shelf's own title
 const SLACK = 4;     // a hair of room so a title never lands exactly on the edge
 
-export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy, staleFade, newPaths, onProjectClick, onShelfClick }: Props) {
+export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy, staleFade, newPaths, excludedLangs, onProjectClick, onShelfClick }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [inlineFilter, setInlineFilter] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -37,7 +39,7 @@ export function ShelfRow({ shelf, query, booksetThreshold, forgingPaths, sortBy,
   const localQ = inlineFilter.toLowerCase().trim();
   const globalQ = query && !shelf.name.toLowerCase().includes(query) ? query : '';
   const narrow = (ps: Project[]) => {
-    let out = ps;
+    let out = excludedLangs.size > 0 ? ps.filter(p => !excludedLangs.has(langKey(p))) : ps;
     if (globalQ) out = out.filter(p => projectMatchesQuery(p, globalQ));
     if (localQ) out = out.filter(p => projectMatchesQuery(p, localQ));
     return sortProjects(out, sortBy);

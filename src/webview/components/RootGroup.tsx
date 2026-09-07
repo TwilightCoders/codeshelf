@@ -12,11 +12,12 @@ interface Props {
   sortBy: 'date' | 'name' | 'language';
   staleFade: boolean;
   newPaths: Set<string>;
+  excludedLangs: Set<string>;
   onProjectClick: (path: string) => void;
   onShelfClick: (shelf: Shelf) => void;
 }
 
-export function RootGroup({ label, shelves, hiddenShelves, query, booksetThreshold, forgingPaths, sortBy, staleFade, newPaths, onProjectClick, onShelfClick }: Props) {
+export function RootGroup({ label, shelves, hiddenShelves, query, booksetThreshold, forgingPaths, sortBy, staleFade, newPaths, excludedLangs, onProjectClick, onShelfClick }: Props) {
   const [collapsed, setCollapsed] = useState(false);
 
   const sorted = [...shelves].sort((a, b) => {
@@ -44,7 +45,7 @@ export function RootGroup({ label, shelves, hiddenShelves, query, booksetThresho
         <div className="root-shelves">
           {sorted.map(shelf => (
             <ShelfRow key={shelf.path} shelf={shelf} query={query} booksetThreshold={booksetThreshold}
-              forgingPaths={forgingPaths} sortBy={sortBy} staleFade={staleFade} newPaths={newPaths}
+              forgingPaths={forgingPaths} sortBy={sortBy} staleFade={staleFade} newPaths={newPaths} excludedLangs={excludedLangs}
               onProjectClick={onProjectClick} onShelfClick={onShelfClick} />
           ))}
         </div>

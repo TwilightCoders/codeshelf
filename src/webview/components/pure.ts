@@ -173,3 +173,25 @@ export function groupByAge<T extends { lastModified: number }>(
     .map(band => ({ band, projects: (buckets.get(band.id) ?? []).sort((a, b) => b.lastModified - a.lastModified) }))
     .filter(g => g.projects.length > 0);
 }
+
+// ── Language filtering ──
+
+/** The key a project filters under. 68 of ~300 have no detected language, so
+ *  "no language" has to be a first-class chip rather than an unfilterable gap. */
+export const NO_LANGUAGE = '—';
+export const langKey = (p: Project) => p.primaryLanguage ?? NO_LANGUAGE;
+
+export interface LangCount { lang: string; count: number }
+
+/** Languages present, most common first. Pure. */
+export function languageCounts(projects: Project[]): LangCount[] {
+  const counts = new Map<string, number>();
+  for (const p of projects) {
+    const k = langKey(p);
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([lang, count]) => ({ lang, count }))
+    .sort((a, b) => b.count - a.count || a.lang.localeCompare(b.lang));
+}
+

@@ -2142,3 +2142,69 @@ kbd {
 .bench-time { font-variant-numeric: tabular-nums; margin-left: auto; }
 .bench-meta { align-items: baseline; row-gap: 2px; }
 .bench-meta .bench-branch { max-width: 16ch; }
+
+/* — Language filter chips ——————————————————————————————————————
+   A quick axis across the whole library: 137 of these projects are Ruby and 68
+   have no detected language at all, so "no language" is a chip in its own right
+   rather than an unfilterable gap. Chips subtract — everything is on until you
+   switch something off — which keeps the default view complete. */
+
+.lang-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  margin-bottom: var(--s6);
+}
+
+.lang-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 24px;
+  padding: 2px var(--s3);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r-pill, 999px);
+  background: var(--surface-1);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--t-xs);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease),
+              border-color var(--dur) var(--ease), opacity var(--dur) var(--ease);
+}
+.lang-chip:hover { background: var(--surface-2); color: var(--ink-0); }
+
+.lang-chip.off {
+  opacity: 0.45;
+  color: var(--ink-4);
+  text-decoration: line-through;
+  background: transparent;
+}
+.lang-chip.off .lang-dot { opacity: 0.35; }
+
+.lang-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.lang-n {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.lang-reset {
+  border: none;
+  background: transparent;
+  color: var(--link, var(--accent));
+  font: inherit;
+  font-size: var(--t-xs);
+  padding: 2px var(--s2);
+  cursor: pointer;
+  border-radius: var(--r1, 4px);
+}
+.lang-reset:hover { background: var(--surface-2); }

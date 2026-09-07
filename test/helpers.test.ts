@@ -4,6 +4,7 @@ import {
   collectProjects, flattenBooksets, sortProjects,
   projectMatchesQuery, matchSnippet,
   heatOf, bandOf, groupByAge, AGE_BANDS,
+  languageCounts, langKey, NO_LANGUAGE,
 } from '../src/webview/components/pure';
 import type { ShelfItem, Project } from '../src/shared/types';
 import { projectOf } from './support';
@@ -273,5 +274,28 @@ describe('groupByAge', () => {
     const input = [p('a', 0), p('b', 40), p('c', 400), p('d', 4000)];
     const total = groupByAge(input, NOW).reduce((n, g) => n + g.projects.length, 0);
     expect(total).toBe(input.length);
+  });
+});
+
+// ── Language chips ──
+
+describe('languageCounts', () => {
+  const p = (name: string, primaryLanguage?: string) =>
+    ({ name, path: `/m/${name}`, markers: [], lastModified: 0, primaryLanguage });
+
+  it('counts by language, most common first', () => {
+    const counts = languageCounts([p('a', 'ruby'), p('b', 'go'), p('c', 'ruby'), p('d', 'ruby')]);
+    expect(counts).toEqual([{ lang: 'ruby', count: 3 }, { lang: 'go', count: 1 }]);
+  });
+
+  it('gives projects with no detected language their own bucket', () => {
+    // 68 of ~300 have none, so this cannot be an unfilterable gap.
+    const counts = languageCounts([p('a'), p('b'), p('c', 'ruby')]);
+    expect(counts.find(c => c.lang === NO_LANGUAGE)?.count).toBe(2);
+    expect(langKey(p('a'))).toBe(NO_LANGUAGE);
+  });
+
+  it('breaks count ties alphabetically so the order is stable', () => {
+    expect(languageCounts([p('a', 'zig'), p('b', 'ada')]).map(c => c.lang)).toEqual(['ada', 'zig']);
   });
 });
