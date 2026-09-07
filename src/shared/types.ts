@@ -21,6 +21,9 @@ export interface Project {
   starred?: boolean;
   // Git worktrees of this project (rendered as a stacked deck, not separate cards).
   worktrees?: Worktree[];
+  // For an umbrella-marked project (docker-compose/turbo/lerna/nx/pnpm), how many
+  // sub-projects live inside it — drives the "MONOREPO · N packages" badge.
+  subProjectCount?: number;
   // Capped, cleaned text corpus (README excerpt + manifest blurb) the search
   // matches against, so a project can be found by what it is, not just its name.
   searchText?: string;
@@ -102,6 +105,9 @@ export interface ScanDiff {
 // project — the webview knows which; the host must not guess it from path depth
 // (collapsed shelves are many levels deep but are still shelves).
 export type ItemKind = 'shelf' | 'project';
+
+/** Which lens the library is viewed through. */
+export type ViewMode = 'shelves' | 'workbench' | 'timeline';
 
 // Webview -> Extension
 export type WebviewToExt =

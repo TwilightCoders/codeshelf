@@ -1,6 +1,6 @@
 import { memo, useState } from 'react';
 import type { Project } from '../../shared/types';
-import { postMsg, LANGUAGE_ICONS, LANGUAGE_COLORS, hashColor, timeAgo } from './helpers';
+import { postMsg, LANGUAGE_ICONS, LANGUAGE_COLORS, hashColor, timeAgo, heatOf } from './helpers';
 
 interface Props {
   project: Project;
@@ -33,7 +33,7 @@ export const ProjectCard = memo(function ProjectCard({ project, rootPath, forgin
   const [showWorktrees, setShowWorktrees] = useState(false);
 
   return (
-    <div className={`project-card ${hasPoster ? 'has-poster' : ''} ${forging ? 'forging' : ''} ${isNew ? 'new-project' : ''} ${isDeck ? 'is-deck' : ''}`}
+    <div className={`project-card heat-${heatOf(project.lastModified)} ${hasPoster ? 'has-poster' : ''} ${forging ? 'forging' : ''} ${isNew ? 'new-project' : ''} ${isDeck ? 'is-deck' : ''}`}
       title={project.path} onClick={() => onOpen(project.path)} role="button" tabIndex={0} aria-label={`Open ${project.name}`}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(project.path); } }}
       style={{ opacity, transition: 'opacity 0.3s ease' }}>
@@ -69,6 +69,9 @@ export const ProjectCard = memo(function ProjectCard({ project, rootPath, forgin
       <div className="card-info">
         <span className="card-name">{project.name}</span>
         {project.description && <p className="card-description">{project.description}</p>}
+        {project.subProjectCount ? (
+          <span className="card-monorepo">monorepo · {project.subProjectCount} packages</span>
+        ) : null}
         <div className="card-meta">
           {project.gitBranch && <span className="card-branch"><i className="codicon codicon-git-branch" /> {project.gitBranch}</span>}
           <span className="card-time">{timeAgo(project.lastModified)}</span>

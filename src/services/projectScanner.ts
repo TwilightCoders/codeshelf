@@ -268,6 +268,14 @@ async function buildProject(
   ]);
   const gitBranch = markers.includes('.git') ? await getBranch(dir) : undefined;
 
+  // Only umbrella-marked projects get a package count. Counting children for all
+  // 297 projects would mean a readdir per child for no visible benefit; a
+  // docker-compose/turbo/lerna root is exactly the case the badge is for.
+  const names = entryNames ?? [];
+  const subProjectCount = detectUmbrellaMarkers(names).length > 0
+    ? await countProjectChildren(dir, names, 99)
+    : undefined;
+
   return {
     name: projectMeta?.name ?? path.basename(dir),
     path: dir,
@@ -281,6 +289,7 @@ async function buildProject(
     starred: projectMeta?.starred,
     searchText: index.searchText,
     tagCounts: index.tagCounts,
+    subProjectCount,
   };
 }
 

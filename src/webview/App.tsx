@@ -1,10 +1,12 @@
 import { createRoot } from 'react-dom/client';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import confetti from 'canvas-confetti';
-import type { ExtToWebview, Shelf, Project, ScanDiff } from '../shared/types';
-import { postMsg } from './components/helpers';
-import { asSortBy, type SortBy } from './components/pure';
+import type { ExtToWebview, Shelf, Project, ScanDiff, ViewMode } from '../shared/types';
+import { postMsg, vscode, heatOf } from './components/helpers';
+import { asSortBy, projectMatchesQuery, type SortBy } from './components/pure';
 import { RootGroup } from './components/RootGroup';
+import { BenchStrip } from './components/BenchStrip';
+import { TimelineView } from './components/TimelineView';
 import { ShelfDetailModal } from './components/ShelfDetailModal';
 import { ProjectDetailModal } from './components/ProjectDetailModal';
 import { CommandPalette, type ProjectEntry } from './components/CommandPalette';
@@ -15,6 +17,7 @@ import { CommandPalette, type ProjectEntry } from './components/CommandPalette';
 // 297-card ramp), so cleanup is bounded to match. Multiplying the step by the
 // full card count meant holding .stagger-in plus an inline --stagger-i on every
 // card for ~24 seconds after the library had finished animating.
+const BENCH_MAX = 6;          // the bench is a glance, not another grid
 const STAGGER_STEP_MS = 80;   // delay between successive card entrances
 const STAGGER_MAX_CARDS = 42; // cards after which the delay stops growing
 const STAGGER_TAIL_MS = 500;  // grace period after the last card before cleanup
@@ -42,6 +45,16 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('date');
   const [staleFade, setStaleFade] = useState(false);
+  // The lens survives a reload — losing it on every rescan would be irritating.
+  const [view, setView] = useState<ViewMode>(() => {
+    const saved = (vscode.getState() as { view?: string } | null)?.view;
+    return saved === 'workbench' || saved === 'timeline' ? saved : 'shelves';
+  });
+  const changeView = useCallback((v: ViewMode) => {
+    setView(v);
+    const prev = (vscode.getState() as Record<string, unknown> | null) ?? {};
+    vscode.setState({ ...prev, view: v });
+  }, []);
   const [projectDetail, setProjectDetail] = useState<{ project: Project; rootPath: string } | null>(null);
   const [shelfDetail, setShelfDetail] = useState<Shelf | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -247,6 +260,7 @@ function App() {
         syncText={state.syncText} syncVisible={state.syncVisible}
         booksetThreshold={state.booksetThreshold} forgingPaths={state.forgingPaths}
         sortBy={sortBy} onSortChange={setSortBy} staleFade={staleFade} onStaleFadeToggle={() => setStaleFade(!staleFade)}
+        view={view} onViewChange={changeView}
         newPaths={newPaths}
         onProjectClick={openProjectDetail} onShelfClick={openShelfDetail}
       />
@@ -302,12 +316,40 @@ interface ShelfScreenProps {
   shelves: Shelf[]; searchQuery: string; onSearchChange: (q: string) => void;
   syncText: string; syncVisible: boolean; booksetThreshold: number; forgingPaths: Set<string>;
   sortBy: SortBy; onSortChange: (s: SortBy) => void; staleFade: boolean; onStaleFadeToggle: () => void;
+  view: ViewMode; onViewChange: (v: ViewMode) => void;
   newPaths: Set<string>;
   onProjectClick: (path: string) => void; onShelfClick: (shelf: Shelf) => void;
 }
 
-function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisible, booksetThreshold, forgingPaths, sortBy, onSortChange, staleFade, onStaleFadeToggle, newPaths, onProjectClick, onShelfClick }: ShelfScreenProps) {
+function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisible, booksetThreshold, forgingPaths, sortBy, onSortChange, staleFade, onStaleFadeToggle, newPaths, view, onViewChange, onProjectClick, onShelfClick }: ShelfScreenProps) {
   const q = searchQuery.toLowerCase().trim();
+
+  // Every visible project, flat — what the Workbench bench strip and the
+  // Timeline both work from (neither has any use for shelf structure).
+  const visibleProjects = useMemo<Project[]>(() => {
+    const out: Project[] = [];
+    for (const shelf of shelves) {
+      if (shelf.hidden) continue;
+      for (const item of shelf.items) {
+        if (item.kind === 'project') out.push(item.project);
+        else out.push(...item.projects);
+      }
+    }
+    return out;
+  }, [shelves]);
+
+  const matching = useMemo(
+    () => (q ? visibleProjects.filter(p => projectMatchesQuery(p, q)) : visibleProjects),
+    [visibleProjects, q]);
+
+  // "On the bench" = what is actually in flight. Anything cooler than a fortnight
+  // is archive, so the strip stays empty rather than padding itself with stale
+  // work just to fill the row.
+  const bench = useMemo(
+    () => matching.filter(p => { const h = heatOf(p.lastModified); return h === 'hot' || h === 'warm'; })
+      .sort((a, b) => b.lastModified - a.lastModified)
+      .slice(0, BENCH_MAX),
+    [matching]);
 
   // Grouping/sorting depends only on shelves, so memoize it — it shouldn't
   // recompute on every search keystroke, sort change, or sync-toast tick.
@@ -344,6 +386,12 @@ function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisib
             <input type="text" className="search-input" placeholder="Search projects..." value={searchQuery} onChange={e => onSearchChange(e.target.value)} />
             {searchQuery && <button className="search-clear" onClick={() => onSearchChange('')}>&times;</button>}
           </div>
+          <div className="view-switch" role="group" aria-label="View mode">
+            {([['shelves', 'Shelves'], ['workbench', 'Workbench'], ['timeline', 'Timeline']] as const).map(([id, label]) => (
+              <button key={id} className={`view-switch-btn ${view === id ? 'active' : ''}`}
+                aria-pressed={view === id} onClick={() => onViewChange(id)}>{label}</button>
+            ))}
+          </div>
           <select className="sort-select" value={sortBy} onChange={e => onSortChange(asSortBy(e.target.value))} title="Sort projects">
             <option value="date">Recent</option>
             <option value="name">A-Z</option>
@@ -357,7 +405,11 @@ function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisib
           <button className="btn btn-ghost" title="Settings (JSON)" onClick={() => postMsg({ type: 'settings:openJson' })}><i className="codicon codicon-settings-gear" /></button>
         </div>
       </header>
-      <div className="shelf-content">
+      <div className={`shelf-content view-${view}`}>
+        {view === 'timeline' ? (
+          <TimelineView projects={matching} onOpen={onProjectClick} />
+        ) : (<>
+        {view === 'workbench' && <BenchStrip projects={bench} onOpen={onProjectClick} />}
         {sortedRoots.map(([rootLabel, rootShelves]) => {
           const hidden = (allForRoot.get(rootLabel) ?? []).filter(s => s.hidden);
           return (
@@ -368,6 +420,7 @@ function ShelfScreen({ shelves, searchQuery, onSearchChange, syncText, syncVisib
           );
         })}
         {sortedRoots.length === 0 && <p className="empty-state">No projects found.</p>}
+        </>)}
       </div>
     </div>
   );

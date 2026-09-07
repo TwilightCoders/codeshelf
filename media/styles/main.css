@@ -1840,3 +1840,305 @@ kbd {
   .card-overlay, .card-open-group, .card-deck-badge, .card-badge { forced-color-adjust: none; }
   :focus-visible { outline: 2px solid Highlight; }
 }
+
+/* ==========================================================================
+   VIEW MODES — Workbench & Timeline
+   Folder structure records where a project was filed; it says nothing about
+   whether it is alive. With ~300 projects at a median staleness over a year,
+   these two lenses put time on the primary axis instead.
+   ========================================================================== */
+
+/* — The switcher ——————————————————————————————————————————————— */
+
+.view-switch {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r2);
+  background: var(--surface-inset);
+}
+
+.view-switch-btn {
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: var(--t-sm);
+  padding: 3px var(--s3);
+  border-radius: calc(var(--r2) - 2px);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.view-switch-btn:hover { color: var(--ink-1); }
+.view-switch-btn.active {
+  background: var(--surface-2);
+  color: var(--ink-0);
+}
+
+/* — Heat ————————————————————————————————————————————————————————
+   Applied to every card always, but only *shown* inside the workbench, where
+   temperature is the organising idea. A left edge reads as a gauge without
+   costing any vertical space. */
+
+.view-workbench .project-card { border-left: 2px solid transparent; }
+.view-workbench .project-card.heat-hot    { border-left-color: var(--accent); }
+.view-workbench .project-card.heat-warm   { border-left-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.view-workbench .project-card.heat-cool   { border-left-color: color-mix(in srgb, var(--ink-3) 45%, transparent); }
+.view-workbench .project-card.heat-cold   { border-left-color: color-mix(in srgb, var(--ink-4) 30%, transparent); }
+.view-workbench .project-card.heat-frozen { border-left-color: transparent; opacity: 0.55; }
+
+/* — On the bench ——————————————————————————————————————————————— */
+
+.bench { margin-bottom: var(--s7); }
+
+.bench-title {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin-bottom: var(--s4);
+  font-size: var(--t-lg);
+  font-weight: 560;
+  color: var(--ink-1);
+}
+
+.bench-count {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+  padding: 1px var(--s3);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r-pill, 999px);
+}
+
+.bench-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--s5);
+}
+
+.bench-card {
+  display: flex;
+  gap: var(--s4);
+  padding: var(--s4);
+  border: 1px solid var(--line-faint);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--r3);
+  background: var(--surface-1);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.bench-card:hover { background: var(--surface-2); border-color: var(--line); }
+.bench-card.heat-warm { border-left-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+
+.bench-cover {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--r2);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.bench-cover svg { width: 100%; height: 100%; object-fit: cover; }
+.bench-badge { font-size: var(--t-sm); font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+
+.bench-body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+
+.bench-name {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--t-md);
+  font-weight: 600;
+  color: var(--ink-0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bench-star { color: var(--gold); font-size: var(--t-sm); }
+
+.bench-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+}
+
+.bench-desc {
+  margin-top: 2px;
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bench-open {
+  margin-top: var(--s3);
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 3px var(--s4);
+  min-height: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--surface-2);
+  color: var(--ink-1);
+  font: inherit;
+  font-size: var(--t-sm);
+  cursor: pointer;
+}
+.bench-open:hover { background: var(--surface-3); color: var(--ink-0); }
+
+/* — Timeline ——————————————————————————————————————————————————— */
+
+.timeline { padding-left: var(--s5); }
+
+.tl-now {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin-bottom: var(--s5);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+.tl-now::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, var(--accent), transparent);
+}
+.tl-now-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+.tl-band {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: var(--s5);
+  padding-bottom: var(--s6);
+  border-left: 1px solid var(--line-faint);
+  margin-left: 4px;
+  padding-left: var(--s5);
+}
+
+.tl-label { position: relative; padding-top: 2px; }
+.tl-label::before {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--s5) - 5px);
+  top: 7px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: var(--bg);
+}
+.tl-band-today .tl-label::before { border-color: var(--accent); }
+
+.tl-band-name { display: block; font-size: var(--t-md); font-weight: 560; color: var(--ink-1); }
+.tl-band-hint { display: block; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--ink-4); }
+.tl-band-count { display: block; margin-top: 2px; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--ink-3); }
+
+.tl-items {
+  display: grid;
+  /* Wide enough that a real project name — task_queue-redis — fits
+     without an ellipsis. Names are the only thing being scanned here. */
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--s2) var(--s4);
+  align-content: start;
+}
+
+.tl-item {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 58px;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-left: 2px solid transparent;
+  border-radius: var(--r2);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.tl-item:hover { background: var(--surface-2); border-color: var(--line-faint); }
+.tl-item.heat-hot    { border-left-color: var(--accent); }
+.tl-item.heat-warm   { border-left-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.tl-item.heat-frozen { opacity: 0.6; }
+
+.tl-avatar {
+  width: 22px; height: 22px;
+  border-radius: var(--r1, 4px);
+  display: grid; place-items: center;
+  font-size: 9px; font-weight: 700; color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+
+.tl-name {
+  display: flex; align-items: center; gap: var(--s2);
+  font-size: var(--t-sm); color: var(--ink-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tl-star { color: var(--gold); font-size: 10px; }
+
+.tl-meta { display: none; }
+.tl-age {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Wide enough to afford a branch column. The name always wins the space: it is
+   the only thing you actually scan for, and "task_queue-re" helps nobody. */
+@media (min-width: 1500px) {
+  .tl-item { grid-template-columns: 22px minmax(0, 1fr) minmax(0, 11ch) 58px; }
+  .tl-meta {
+    display: flex; gap: var(--s3); justify-content: flex-end;
+    font-family: var(--font-mono); font-size: var(--t-xs); color: var(--ink-4);
+    overflow: hidden; white-space: nowrap;
+  }
+  /* The avatar already carries the language badge — repeating it in text only
+     costs the name its room. */
+  .tl-lang { display: none; }
+}
+
+/* — Monorepo badge ————————————————————————————————————————————— */
+
+.card-monorepo {
+  align-self: flex-start;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r1, 4px);
+  padding: 0 4px;
+}
+
+/* Metadata atoms inside the bench card and timeline row. They inherit their
+   family's type, but naming them keeps each addressable (and the coverage
+   check honest about what the sheet actually styles). */
+.bench-lang, .tl-lang { color: var(--ink-3); }
+.bench-branch, .tl-branch {
+  display: inline-flex; align-items: center; gap: 3px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22ch;
+}
+.bench-time { font-variant-numeric: tabular-nums; margin-left: auto; }
+.bench-meta { align-items: baseline; row-gap: 2px; }
+.bench-meta .bench-branch { max-width: 16ch; }

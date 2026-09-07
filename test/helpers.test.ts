@@ -3,6 +3,7 @@ import {
   hashColor, timeAgo,
   collectProjects, flattenBooksets, sortProjects,
   projectMatchesQuery, matchSnippet,
+  heatOf, bandOf, groupByAge, AGE_BANDS,
 } from '../src/webview/components/pure';
 import type { ShelfItem, Project } from '../src/shared/types';
 import { projectOf } from './support';
@@ -216,5 +217,61 @@ describe('sortProjects', () => {
       makeProject('alpha', { starred: true }),
     ];
     expect(sortProjects(projects, 'name')[0].name).toBe('alpha');
+  });
+});
+
+// ── Heat & age bands ──
+
+const DAY = 86_400_000;
+const NOW = Date.UTC(2026, 8, 7);
+const daysAgo = (d: number) => NOW - d * DAY;
+
+describe('heatOf', () => {
+  it('walks hot → frozen as a project cools', () => {
+    expect(heatOf(daysAgo(0), NOW)).toBe('hot');
+    expect(heatOf(daysAgo(5), NOW)).toBe('warm');
+    expect(heatOf(daysAgo(30), NOW)).toBe('cool');
+    expect(heatOf(daysAgo(200), NOW)).toBe('cold');
+    expect(heatOf(daysAgo(800), NOW)).toBe('frozen');
+  });
+  it('is inclusive at the low edge of each band', () => {
+    expect(heatOf(daysAgo(2), NOW)).toBe('warm');   // 2 days is no longer hot
+    expect(heatOf(daysAgo(14), NOW)).toBe('cool');
+    expect(heatOf(daysAgo(365), NOW)).toBe('frozen');
+  });
+});
+
+describe('bandOf', () => {
+  it('places a project in the right stratum', () => {
+    expect(bandOf(daysAgo(0), NOW).id).toBe('today');
+    expect(bandOf(daysAgo(3), NOW).id).toBe('week');
+    expect(bandOf(daysAgo(20), NOW).id).toBe('month');
+    expect(bandOf(daysAgo(90), NOW).id).toBe('months');
+    expect(bandOf(daysAgo(300), NOW).id).toBe('year');
+    expect(bandOf(daysAgo(900), NOW).id).toBe('deep');
+  });
+  it('always returns a band — the last one is unbounded', () => {
+    expect(bandOf(0, NOW).id).toBe('deep');
+    expect(AGE_BANDS[AGE_BANDS.length - 1].maxDays).toBe(Infinity);
+  });
+});
+
+describe('groupByAge', () => {
+  const p = (name: string, d: number) => ({ name, lastModified: daysAgo(d) });
+
+  it('groups newest-first and drops empty bands', () => {
+    const groups = groupByAge([p('old', 900), p('today', 0), p('week', 3)], NOW);
+    expect(groups.map(g => g.band.id)).toEqual(['today', 'week', 'deep']);
+  });
+
+  it('sorts within a band, most recent first', () => {
+    const groups = groupByAge([p('b', 5), p('a', 2), p('c', 6)], NOW);
+    expect(groups[0].projects.map(x => x.name)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('keeps every project exactly once', () => {
+    const input = [p('a', 0), p('b', 40), p('c', 400), p('d', 4000)];
+    const total = groupByAge(input, NOW).reduce((n, g) => n + g.projects.length, 0);
+    expect(total).toBe(input.length);
   });
 });

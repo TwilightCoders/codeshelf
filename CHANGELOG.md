@@ -7,6 +7,20 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **View modes — Shelves, Workbench and Timeline.** Folder structure records
+  where a project was filed; it says nothing about whether it is alive. With ~300
+  projects at a median staleness over a year, two lenses put time on the primary
+  axis instead. **Workbench** adds an "on the bench" strip of what is actually in
+  flight (anything touched within a fortnight, newest first) above the usual
+  shelves, each with its description and a direct open button, and gives every
+  card a heat edge from hot to frozen. **Timeline** drops shelves altogether and
+  lays the whole library out by age — Today / This week / This month / Months /
+  This year / The deep past — newest at the top, sinking as it cools. The chosen
+  lens survives a reload.
+- **Monorepo package count** — an umbrella-marked project (docker-compose, turbo,
+  lerna, nx, pnpm-workspace) shows how many sub-projects it contains. Counted
+  only for umbrella roots, since doing it for all 297 projects would cost a
+  readdir per child for no visible benefit.
 - **Content search** — each project is indexed into a small search corpus matched
   by both the header filter and the Cmd/Ctrl+K palette (which shows a snippet of
   the hit). Sources: a cleaned README excerpt, the project's `.claude/CONTEXT.md`,

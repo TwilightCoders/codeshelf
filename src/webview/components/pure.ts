@@ -114,3 +114,62 @@ export function sortProjects(projects: Project[], sortBy: SortBy = 'date'): Proj
     }
   });
 }
+
+// ── Heat & age bands ──
+//
+// The library is 297 projects of which ~39 were touched in the last 90 days and
+// the median is over a year cold. Age is therefore the most useful single signal
+// there is, and both the Workbench and Timeline views are built on it.
+
+const DAY = 86_400_000;
+
+export type Heat = 'hot' | 'warm' | 'cool' | 'cold' | 'frozen';
+
+/** Where a project sits on the hot→frozen scale, by days since last touched. */
+export function heatOf(lastModified: number, now = Date.now()): Heat {
+  const days = (now - lastModified) / DAY;
+  if (days < 2) return 'hot';
+  if (days < 14) return 'warm';
+  if (days < 60) return 'cool';
+  if (days < 365) return 'cold';
+  return 'frozen';
+}
+
+export interface AgeBand {
+  id: string;
+  label: string;
+  hint: string;
+  /** Upper bound in days; Infinity for the last band. */
+  maxDays: number;
+}
+
+export const AGE_BANDS: AgeBand[] = [
+  { id: 'today', label: 'Today', hint: 'last 24h', maxDays: 1 },
+  { id: 'week', label: 'This week', hint: '1–6 days', maxDays: 7 },
+  { id: 'month', label: 'This month', hint: '1–4 wks', maxDays: 31 },
+  { id: 'months', label: 'Months', hint: '2–5 mo', maxDays: 182 },
+  { id: 'year', label: 'This year', hint: '6–12 mo', maxDays: 365 },
+  { id: 'deep', label: 'The deep past', hint: '> 1 yr', maxDays: Infinity },
+];
+
+/** The band a project falls into. Always returns one — the last is unbounded. */
+export function bandOf(lastModified: number, now = Date.now()): AgeBand {
+  const days = (now - lastModified) / DAY;
+  return AGE_BANDS.find(b => days < b.maxDays) ?? AGE_BANDS[AGE_BANDS.length - 1];
+}
+
+/** Group projects into age bands, newest first, dropping empty bands. */
+export function groupByAge<T extends { lastModified: number }>(
+  projects: T[],
+  now = Date.now(),
+): Array<{ band: AgeBand; projects: T[] }> {
+  const buckets = new Map<string, T[]>();
+  for (const p of projects) {
+    const id = bandOf(p.lastModified, now).id;
+    const list = buckets.get(id);
+    if (list) list.push(p); else buckets.set(id, [p]);
+  }
+  return AGE_BANDS
+    .map(band => ({ band, projects: (buckets.get(band.id) ?? []).sort((a, b) => b.lastModified - a.lastModified) }))
+    .filter(g => g.projects.length > 0);
+}

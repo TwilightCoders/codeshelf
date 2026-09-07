@@ -1007,3 +1007,65 @@ describe('inline shelf spanning', () => {
     expect(big.width).toBeGreaterThan(big.bedWidth * 0.95);
   });
 });
+
+// ── View modes ──
+
+describe('view modes', () => {
+  async function switchTo(label: string) {
+    await page.evaluate(l => {
+      Array.from(document.querySelectorAll<HTMLElement>('.view-switch-btn'))
+        .find(b => b.textContent === l)?.click();
+    }, label);
+    await new Promise(r => setTimeout(r, 400));
+  }
+
+  it('offers all three lenses and starts on Shelves', async () => {
+    const labels = await page.$$eval('.view-switch-btn', els => els.map(e => e.textContent));
+    expect(labels).toEqual(['Shelves', 'Workbench', 'Timeline']);
+    expect(await page.$eval('.view-switch-btn.active', e => e.textContent)).toBe('Shelves');
+    expect(await page.$('.bench')).toBeNull();
+    expect(await page.$('.timeline')).toBeNull();
+  });
+
+  it('Workbench puts recent work on a bench above the shelves', async () => {
+    await switchTo('Workbench');
+    expect(await page.$('.bench')).not.toBeNull();
+    // The shelves are still there — the bench is an addition, not a replacement.
+    expect((await page.$$('.shelf-row')).length).toBeGreaterThan(0);
+    const benched = await page.$$eval('.bench-name', els => els.map(e => e.textContent?.trim()));
+    expect(benched.length).toBeGreaterThan(0);
+  });
+
+  it('Timeline replaces the shelves with age bands', async () => {
+    await switchTo('Timeline');
+    expect(await page.$('.timeline')).not.toBeNull();
+    expect(await page.$$('.shelf-row')).toHaveLength(0);
+    const bands = await page.$$eval('.tl-band-name', els => els.map(e => e.textContent));
+    expect(bands.length).toBeGreaterThan(0);
+    // every band label comes from the fixed ladder, newest first
+    const ladder = ['Today', 'This week', 'This month', 'Months', 'This year', 'The deep past'];
+    expect(bands.every(b => ladder.includes(b!))).toBe(true);
+    expect(bands).toEqual(ladder.filter(l => bands.includes(l)));
+  });
+
+  it('shows every visible project exactly once in the timeline', async () => {
+    await switchTo('Timeline');
+    const expected = await page.evaluate(() => {
+      const shelves = window.__mockHost?.getShelves() ?? [];
+      let n = 0;
+      for (const s of shelves) {
+        if (s.hidden) continue;
+        for (const i of s.items) n += i.kind === 'project' ? 1 : i.projects.length;
+      }
+      return n;
+    });
+    expect((await page.$$('.tl-item')).length).toBe(expected);
+  });
+
+  it('returns to the shelves', async () => {
+    await switchTo('Timeline');
+    await switchTo('Shelves');
+    expect(await page.$('.timeline')).toBeNull();
+    expect((await page.$$('.shelf-row')).length).toBeGreaterThan(0);
+  });
+});

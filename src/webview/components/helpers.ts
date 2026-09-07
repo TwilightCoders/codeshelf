@@ -6,6 +6,7 @@ export {
   hashColor, timeAgo,
   collectProjects, flattenBooksets, sortProjects,
   projectMatchesQuery, matchSnippet,
+  heatOf, bandOf, groupByAge, AGE_BANDS,
 } from './pure';
 
 // ── VS Code API ──
