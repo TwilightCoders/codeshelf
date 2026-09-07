@@ -11,7 +11,12 @@ import { CommandPalette, type ProjectEntry } from './components/CommandPalette';
 
 // ── Timing constants (ms) ──
 
+// The stylesheet clamps the per-card entrance delay (it cannot afford to run a
+// 297-card ramp), so cleanup is bounded to match. Multiplying the step by the
+// full card count meant holding .stagger-in plus an inline --stagger-i on every
+// card for ~24 seconds after the library had finished animating.
 const STAGGER_STEP_MS = 80;   // delay between successive card entrances
+const STAGGER_MAX_CARDS = 42; // cards after which the delay stops growing
 const STAGGER_TAIL_MS = 500;  // grace period after the last card before cleanup
 const SYNC_TOAST_MS = 3000;   // how long the sync status lingers
 const NEW_BADGE_MS = 4000;    // how long freshly-added cards stay highlighted
@@ -112,7 +117,7 @@ function App() {
                   card.classList.remove('stagger-in');
                   card.style.removeProperty('--stagger-i');
                 });
-              }, cards.length * STAGGER_STEP_MS + STAGGER_TAIL_MS);
+              }, Math.min(cards.length, STAGGER_MAX_CARDS) * STAGGER_STEP_MS + STAGGER_TAIL_MS);
             });
           }
           if (msg.diff?.addedPaths?.length) {

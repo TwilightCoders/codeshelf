@@ -1,332 +1,266 @@
-/* ============================================================
-   CodeShelf — theme / visual layer
-   A "game library" personality layered on VS Code theme tokens.
+/* ==========================================================================
+   CodeShelf — "Card Catalogue"
+   --------------------------------------------------------------------------
+   DESIGN RATIONALE
 
-   Design system lives in :root below. Everything downstream
-   consumes tokens — no raw magic numbers in component rules.
-   ============================================================ */
+   The library is ~300 projects, of which ~39 are alive. The sheet is therefore
+   built around one idea: THE PAGE IS QUIET AND THE LIVE THINGS ARE LOUD.
+
+   1. Ink, not chrome. Every surface is derived from the host theme by mixing
+      the *foreground* into the *background* (`color-mix(in srgb, var(--fg) N%,
+      var(--bg))`). That single trick produces correct elevation in BOTH light
+      and dark themes with no media query and no hardcoded grey: mixing dark ink
+      into white paper lightens down, mixing light ink into dark paper lifts up.
+      Borders are hairlines, not boxes. There is exactly one saturated colour on
+      screen at rest (the star gold); everything else is greyscale, so a poster,
+      a star, or a fresh timestamp is the only thing competing for the eye.
+
+   2. Density with rhythm. Cards are 156px wide with a fixed 104px cover. Fixed
+      cover height (rather than aspect-ratio) buys three things: perfectly
+      regular rows across a 70-card shelf, trivially anchorable corner overlays,
+      and a predictable one-row preview clamp. Card text is hard-clamped to one
+      line everywhere (name / description / tags) so no card can ever be taller
+      than its neighbour — a wall of 300 items only reads as a wall if the rows
+      are true.
+
+   3. Staleness is the spine of the visual system. `staleFade` sets inline
+      opacity, so recency literally recedes. To reinforce it without JS, the
+      card's timestamp is the ONLY typographically privileged piece of metadata
+      (tabular, mono, right-aligned), and hover restores full contrast — so
+      scanning for "what's alive" is a vertical read down one column of numbers.
+
+   4. Small shelves are cells, not rows. `.root-shelves` is a wrap-flex: full
+      shelves take 100%, `.shelf-compact` shelves shrink-to-fit and tile side by
+      side in bordered cells. 25 shelves stop being 25 full-bleed bands.
+
+   5. Motion is short and only ever confirms an action. 160ms is the house
+      duration; the one long move is the poster flip (520ms), because it is a
+      reward. Everything collapses under `prefers-reduced-motion`.
+
+   TECHNICAL NOTES
+   - `.project-card` carries an INLINE `transition: opacity .3s ease`, which
+     overrides any `transition` this sheet sets on the card element itself. All
+     card hover motion therefore lives on `::after` (the ring) and on children,
+     which are unaffected by the inline declaration.
+   - `.shelf-row-content` clamps with `max-height` + `overflow:hidden`, so it
+     sets `grid-auto-rows: max-content` + `align-content: start` to stop rows
+     from being squashed to fit.
+   - No @import, no url(), no external font. System stack via
+     `--vscode-font-family` only.
+   ========================================================================== */
+
+/* ==========================================================================
+   1. TOKENS
+   ========================================================================== */
 
 :root {
-  /* ── Spacing scale (4px base, geometric-ish) ── */
-  --sp-0: 0;
-  --sp-1: 2px;
-  --sp-2: 4px;
-  --sp-3: 6px;
-  --sp-4: 8px;
-  --sp-5: 12px;
-  --sp-6: 16px;
-  --sp-7: 20px;
-  --sp-8: 24px;
-  --sp-9: 32px;
-  --sp-10: 40px;
-  --sp-12: 64px;
+  /* — Type families — */
+  --font: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif);
+  --mono: var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace);
 
-  /* ── Type scale ── */
-  --fs-2xs: 10px;
-  --fs-xs: 11px;
-  --fs-sm: 12px;
-  --fs-base: 13px;
-  --fs-md: 14px;
-  --fs-lg: 15px;
-  --fs-xl: 18px;
-  --fs-2xl: 20px;
-  --fs-3xl: 28px;
-  --fs-4xl: 48px;
+  /* — Host colour anchors — */
+  --fg: var(--vscode-editor-foreground, #d4d4d4);
+  --bg: var(--vscode-editor-background, #1e1e1e);
+  --muted: var(--vscode-descriptionForeground, color-mix(in srgb, var(--fg) 62%, transparent));
+  --accent: var(--vscode-textLink-foreground, #4daafc);
+  --focus: var(--vscode-focusBorder, var(--accent));
+  --sidebar: var(--vscode-sideBar-background, var(--bg));
+  --panel-line: var(--vscode-panel-border, color-mix(in srgb, var(--fg) 16%, transparent));
+  --btn-bg: var(--vscode-button-background, var(--accent));
+  --btn-fg: var(--vscode-button-foreground, #fff);
+  --btn-bg-hover: var(--vscode-button-hoverBackground, var(--btn-bg));
+  --badge-bg: var(--vscode-badge-background, color-mix(in srgb, var(--fg) 16%, var(--bg)));
+  --badge-fg: var(--vscode-badge-foreground, var(--fg));
+  --hover-bg: var(--vscode-toolbar-hoverBackground, color-mix(in srgb, var(--fg) 10%, transparent));
+  --slider: var(--vscode-scrollbarSlider-background, color-mix(in srgb, var(--fg) 18%, transparent));
+  --slider-hover: var(--vscode-scrollbarSlider-hoverBackground, color-mix(in srgb, var(--fg) 28%, transparent));
 
-  --fw-normal: 400;
-  --fw-medium: 500;
-  --fw-semibold: 600;
-  --fw-bold: 700;
+  /* — Derived surfaces (theme-agnostic elevation) — */
+  --surface-0: var(--bg);
+  --surface-1: color-mix(in srgb, var(--fg) 4%, var(--bg));
+  --surface-2: color-mix(in srgb, var(--fg) 7.5%, var(--bg));
+  --surface-3: color-mix(in srgb, var(--fg) 12%, var(--bg));
+  --surface-inset: color-mix(in srgb, var(--fg) 6%, var(--bg));
 
-  --lh-tight: 1.25;
-  --lh-normal: 1.5;
+  /* — Hairlines — */
+  --line-faint: color-mix(in srgb, var(--fg) 8%, transparent);
+  --line: color-mix(in srgb, var(--fg) 15%, transparent);
+  --line-strong: color-mix(in srgb, var(--fg) 28%, transparent);
 
-  /* ── Radius scale ── */
-  --r-sm: 3px;
-  --r-md: 4px;
-  --r-lg: 6px;
-  --r-xl: 8px;
-  --r-pill: 999px;
+  /* — Text ramps — */
+  --ink-1: var(--fg);
+  --ink-2: color-mix(in srgb, var(--fg) 74%, transparent);
+  --ink-3: color-mix(in srgb, var(--fg) 52%, transparent);
+  --ink-4: color-mix(in srgb, var(--fg) 36%, transparent);
 
-  /* ── Motion tokens ── */
-  --dur-fast: 0.12s;
-  --dur-base: 0.18s;
-  --dur-slow: 0.3s;
-  --dur-flip: 0.55s;
-  --ease-out: cubic-bezier(0.2, 0.7, 0.3, 1);
-  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --stagger-step: 60ms;
+  /* — Signals — */
+  --gold: var(--vscode-charts-yellow, #d9a325);
+  --scrim: color-mix(in srgb, var(--bg) 74%, transparent);
+  --scrim-solid: color-mix(in srgb, var(--bg) 90%, transparent);
 
-  /* ── Elevation ── */
-  --shadow-card: 0 2px 6px rgba(0, 0, 0, 0.18);
-  --shadow-card-hover: 0 6px 20px rgba(0, 0, 0, 0.32);
-  --shadow-modal: 0 18px 56px rgba(0, 0, 0, 0.5);
-  --shadow-dropdown: 0 6px 18px rgba(0, 0, 0, 0.4);
+  /* — Space (4pt) — */
+  --s0: 2px;  --s1: 4px;  --s2: 6px;  --s3: 8px;
+  --s4: 12px; --s5: 16px; --s6: 24px; --s7: 32px; --s8: 48px;
 
-  /* ── Theme-agnostic surface tints ──
-     `color-mix` blends VS Code tokens so the same rule reads
-     correctly on light AND dark themes instead of hardcoded white. */
-  --surface-1: color-mix(in srgb, var(--vscode-editor-foreground) 4%, transparent);
-  --surface-2: color-mix(in srgb, var(--vscode-editor-foreground) 7%, transparent);
-  --surface-3: color-mix(in srgb, var(--vscode-editor-foreground) 11%, transparent);
-  --hairline: color-mix(in srgb, var(--vscode-editor-foreground) 12%, transparent);
-  --hairline-strong: color-mix(in srgb, var(--vscode-editor-foreground) 20%, transparent);
+  /* — Radius — */
+  --r1: 3px; --r2: 5px; --r3: 8px; --r4: 12px; --rp: 999px;
 
-  /* ── Brand accents (the "shelf" personality) ── */
-  --accent-star: #e8b627;
-  --accent-forge: rgba(232, 182, 39, 1);
-  --link: var(--vscode-textLink-foreground, #3794ff);
-  --danger: var(--vscode-errorForeground, #f44);
+  /* — Type scale — */
+  --t-micro: 9.5px;
+  --t-xs: 10.5px;
+  --t-sm: 11.5px;
+  --t-md: 12.5px;
+  --t-lg: 14px;
+  --t-xl: 19px;
+  --t-2xl: 27px;
 
-  /* ── Focus ring ── */
-  --focus-ring: 0 0 0 2px var(--vscode-editor-background),
-                0 0 0 4px var(--vscode-focusBorder, #007fd4);
+  /* — Card geometry — */
+  --card-w: 156px;
+  --poster-h: 104px;
+  --shelf-preview-h: 208px;
 
-  /* ── Card geometry ── */
-  --card-poster-h: 120px;
-  --card-min: 184px;
-  /* Collapsed shelf preview = one full card row. A card is poster + name +
-     branch + time + up to 2 tag rows (+ worktree row), ~270px; the old 230px
-     cap sliced the tags off every card. */
-  --shelf-preview-h: 300px;
+  /* — Elevation (neutral, works on light + dark) — */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.16);
+  --shadow-2: 0 4px 12px -2px rgba(0, 0, 0, 0.24);
+  --shadow-3: 0 12px 32px -8px rgba(0, 0, 0, 0.34);
+  --shadow-4: 0 28px 64px -16px rgba(0, 0, 0, 0.46);
+
+  /* — Motion — */
+  --ease: cubic-bezier(0.22, 0.7, 0.28, 1);
+  --dur: 160ms;
+  --dur-slow: 520ms;
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+/* ==========================================================================
+   2. RESET / BASE
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
   margin: 0;
   padding: 0;
+  height: 100%;
 }
 
 body {
-  font-family: var(--vscode-font-family, system-ui, sans-serif);
-  font-size: var(--vscode-font-size, var(--fs-base));
-  color: var(--vscode-editor-foreground);
-  background: var(--vscode-editor-background);
-  overflow-x: hidden;
+  font-family: var(--font);
+  font-size: var(--t-md);
+  line-height: 1.45;
+  color: var(--ink-1);
+  background: var(--surface-0);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
 }
 
-/* ── Native-feeling scrollbars (match VS Code) ── */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--surface-3) transparent;
+body.modal-open { overflow: hidden; }
+
+#app { height: 100%; }
+
+h1, h2, h3, p, ul { margin: 0; }
+ul { padding: 0; list-style: none; }
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
 }
 
-*::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-*::-webkit-scrollbar-thumb {
-  background: var(--vscode-scrollbarSlider-background, var(--surface-2));
-  border-radius: var(--r-pill);
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-
-*::-webkit-scrollbar-thumb:hover {
-  background: var(--vscode-scrollbarSlider-hoverBackground, var(--surface-3));
-  background-clip: content-box;
-}
-
-/* ── Global accessible focus ──
-   One visible ring for every keyboard-focused control. Mouse
-   clicks won't trigger :focus-visible, so no noisy rings on tap. */
-:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-  border-radius: var(--r-md);
-}
-
-/* Screens */
-.screen {
-  width: 100%;
-  min-height: 100vh;
-  flex-direction: column;
-}
-
-/* ── Setup screen ── */
-.setup-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  gap: var(--sp-6);
-  text-align: center;
-  padding: var(--sp-10);
-  animation: fadeIn var(--dur-slow) var(--ease-out);
-}
-
-.setup-title {
-  font-size: var(--fs-4xl);
-  font-weight: var(--fw-normal);
-  letter-spacing: -1px;
-  color: var(--vscode-editor-foreground);
-}
-
-.setup-subtitle {
-  font-size: var(--fs-xl);
-  color: var(--vscode-descriptionForeground);
-  margin-bottom: var(--sp-4);
-}
-
-.setup-description {
-  font-size: var(--fs-md);
-  color: var(--vscode-descriptionForeground);
-  max-width: 400px;
-  line-height: var(--lh-normal);
-}
-
-/* ── Buttons ── */
-.btn {
-  border: none;
+button {
+  background: none;
+  border: 0;
+  padding: 0;
   cursor: pointer;
-  font-family: inherit;
-  font-size: var(--fs-base);
-  border-radius: var(--r-md);
-  transition: background var(--dur-fast) var(--ease-out),
-              color var(--dur-fast) var(--ease-out),
-              opacity var(--dur-fast) var(--ease-out),
-              transform var(--dur-fast) var(--ease-out);
+  color: inherit;
 }
 
-.btn:active {
-  transform: translateY(1px);
+/* One focus language for the entire app. */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--r1);
 }
 
-.btn-primary {
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
-  padding: var(--sp-5) var(--sp-8);
-  font-size: var(--fs-md);
-  font-weight: var(--fw-medium);
+/* Scrollbars — quiet until used. */
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--slider);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: var(--rp);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--slider-hover); background-clip: padding-box; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+.codicon {
+  font-size: 14px;
+  line-height: 1;
+  display: inline-block;
+  vertical-align: middle;
 }
 
-.btn-primary:hover {
-  background: var(--vscode-button-hoverBackground);
-}
+/* ==========================================================================
+   3. SCREEN SHELL
+   ========================================================================== */
 
-.btn-ghost {
-  background: transparent;
-  color: var(--vscode-editor-foreground);
-  /* min hit target ≥ 28px tall regardless of icon size */
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 28px;
-  min-height: 28px;
-  padding: var(--sp-3);
-  font-size: var(--fs-xl);
-  opacity: 0.6;
-}
-
-.btn-ghost:hover {
-  opacity: 1;
-  background: var(--vscode-toolbar-hoverBackground, var(--surface-2));
-}
-
-/* ── Sync status ── */
-.sync-status {
-  font-size: var(--fs-xs);
-  color: var(--vscode-descriptionForeground);
-  opacity: 0;
-  transition: opacity var(--dur-slow) var(--ease-out);
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.sync-status.visible {
-  opacity: 0.9;
-}
-
-.sync-status.fade-out {
-  opacity: 0;
-  transition: opacity 0.6s var(--ease-out);
-}
-
-/* ── Loading screen ── */
-#loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* `.screen` always receives an inline `display:flex`. */
+.screen {
+  flex-direction: column;
   height: 100vh;
-  gap: var(--sp-6);
+  min-height: 0;
+  background: var(--surface-0);
 }
 
-.loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--hairline-strong);
-  border-top-color: var(--link);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
+/* — Header ————————————————————————————————————————————————— */
 
-.loading-text {
-  color: var(--vscode-descriptionForeground);
-  font-size: var(--fs-md);
-}
-
-/* ── Shelf header / toolbar ── */
 .shelf-header {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-5);
-  padding: var(--sp-5) var(--sp-8);
-  border-bottom: 1px solid var(--vscode-panel-border, var(--hairline));
-  position: sticky;
-  top: 0;
-  /* slight translucency + blur reads as a native title bar */
-  background: color-mix(in srgb, var(--vscode-editor-background) 88%, transparent);
-  backdrop-filter: blur(8px);
-  z-index: 100;
+  gap: var(--s5);
+  padding: var(--s4) var(--s6);
+  background: color-mix(in srgb, var(--sidebar) 72%, var(--surface-0));
+  border-bottom: 1px solid var(--line);
+  box-shadow: var(--shadow-1);
+  position: relative;
+  z-index: 5;
 }
 
 .shelf-logo {
-  font-size: var(--fs-xl);
-  font-weight: var(--fw-bold);
-  letter-spacing: -0.5px;
+  font-size: var(--t-lg);
+  font-weight: 620;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink-1);
   white-space: nowrap;
+  margin-right: auto;
+  padding-left: var(--s3);
+  border-left: 2px solid var(--accent);
+  line-height: 1.1;
 }
 
 .shelf-controls {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  gap: var(--s2);
+  min-width: 0;
 }
 
-.sort-select {
-  background: var(--vscode-input-background);
-  color: var(--vscode-input-foreground);
-  border: 1px solid var(--vscode-input-border, var(--hairline));
-  border-radius: var(--r-md);
-  padding: var(--sp-3) var(--sp-4);
-  min-height: 28px;
-  font-size: var(--fs-sm);
-  font-family: inherit;
-  outline: none;
-  cursor: pointer;
-  transition: border-color var(--dur-fast) var(--ease-out);
+.sync-status {
+  font-size: var(--t-sm);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+  pointer-events: none;
+  padding-right: var(--s2);
 }
+.sync-status.visible { opacity: 1; transform: none; }
 
-.sort-select:hover {
-  border-color: var(--hairline-strong);
-}
-
-.btn-ghost.active {
-  opacity: 1;
-  color: var(--link);
-}
+/* — Search ————————————————————————————————————————————————— */
 
 .search-wrapper {
   position: relative;
@@ -335,1619 +269,1569 @@ body {
 }
 
 .search-input {
-  background: var(--vscode-input-background);
-  color: var(--vscode-input-foreground);
-  border: 1px solid var(--vscode-input-border, var(--hairline));
-  border-radius: var(--r-md);
-  padding: var(--sp-3) var(--sp-9) var(--sp-3) var(--sp-5);
-  min-height: 28px;
-  font-size: var(--fs-base);
-  font-family: inherit;
-  width: 240px;
-  max-width: 42vw;
-  outline: none;
-  transition: border-color var(--dur-fast) var(--ease-out),
-              box-shadow var(--dur-fast) var(--ease-out);
+  width: 210px;
+  height: 28px;
+  padding: 0 26px 0 var(--s4);
+  font-size: var(--t-md);
+  color: var(--ink-1);
+  background: var(--surface-inset);
+  border: 1px solid var(--line);
+  border-radius: var(--rp);
+  transition: width var(--dur) var(--ease), border-color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-
+.search-input::placeholder { color: var(--ink-4); }
+.search-input:hover { border-color: var(--line-strong); }
 .search-input:focus {
-  border-color: var(--vscode-focusBorder);
-  box-shadow: 0 0 0 1px var(--vscode-focusBorder);
-}
-
-.search-input::placeholder {
-  color: var(--vscode-input-placeholderForeground);
+  width: 260px;
+  background: var(--surface-2);
+  border-color: var(--focus);
+  outline: none;
 }
 
 .search-clear {
-  display: none;
   position: absolute;
-  right: var(--sp-2);
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--ink-3);
+  border-radius: var(--rp);
+}
+.search-clear:hover { color: var(--ink-1); background: var(--hover-bg); }
+
+/* — Sort select ———————————————————————————————————————————— */
+
+.sort-select {
+  height: 28px;
+  padding: 0 var(--s3);
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+  background: var(--surface-inset);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.sort-select:hover { color: var(--ink-1); border-color: var(--line-strong); }
+.sort-select option { background: var(--surface-2); color: var(--ink-1); }
+
+/* — Buttons ———————————————————————————————————————————————— */
+
+.btn {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  background: none;
-  border: none;
-  color: var(--vscode-input-foreground);
+  gap: var(--s2);
+  min-height: 28px;
+  min-width: 28px;
+  padding: 0 var(--s4);
+  font-size: var(--t-md);
+  font-weight: 500;
+  border-radius: var(--r2);
   cursor: pointer;
-  font-size: var(--fs-xl);
-  line-height: 1;
-  border-radius: var(--r-sm);
-  opacity: 0.5;
-  transition: opacity var(--dur-fast) var(--ease-out),
-              background var(--dur-fast) var(--ease-out);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease),
+              border-color var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.btn:active { transform: translateY(1px); }
+
+.btn-primary {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-1);
+}
+.btn-primary:hover { background: var(--btn-bg-hover); }
+
+.btn-ghost {
+  padding: 0 var(--s2);
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid transparent;
+}
+.btn-ghost:hover { color: var(--ink-1); background: var(--hover-bg); }
+.btn-ghost.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
 }
 
-.search-wrapper .search-clear {
-  display: inline-flex;
-}
+/* — Content region —————————————————————————————————————————— */
 
-.search-clear:hover {
-  opacity: 1;
-  background: var(--surface-2);
-}
-
-/* ── Shelf content ── */
 .shelf-content {
-  padding: var(--sp-8);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-8);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--s6) var(--s6) var(--s8);
+  scrollbar-gutter: stable;
 }
 
-/* ── Root group ── */
-.root-group {
+.empty-state {
+  margin: var(--s8) auto;
+  max-width: 380px;
+  text-align: center;
+  font-size: var(--t-md);
+  color: var(--ink-3);
+}
+
+/* ==========================================================================
+   4. SETUP + LOADING
+   ========================================================================== */
+
+.setup-container {
+  margin: auto;
+  max-width: 420px;
+  padding: var(--s7);
+  text-align: center;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  align-items: center;
+  gap: var(--s3);
 }
+
+.setup-title {
+  font-size: var(--t-2xl);
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: var(--ink-1);
+}
+
+.setup-subtitle {
+  font-size: var(--t-lg);
+  color: var(--ink-2);
+}
+
+.setup-description {
+  font-size: var(--t-md);
+  color: var(--ink-3);
+  max-width: 34ch;
+  margin-bottom: var(--s3);
+}
+
+.setup-container .btn-primary { min-height: 34px; padding: 0 var(--s6); }
+
+.loading-spinner {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  animation: cs-spin 720ms linear infinite;
+}
+
+.loading-text {
+  font-size: var(--t-md);
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+}
+
+@keyframes cs-spin { to { transform: rotate(360deg); } }
+
+/* ==========================================================================
+   5. ROOT GROUP
+   ========================================================================== */
+
+.root-group { margin-bottom: var(--s7); }
+.root-group:last-child { margin-bottom: 0; }
 
 .root-header {
-  font-size: var(--fs-lg);
-  font-weight: var(--fw-semibold);
-  color: var(--vscode-editor-foreground);
-  padding: var(--sp-4) var(--sp-2);
-  cursor: pointer;
-  user-select: none;
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
+  gap: var(--s3);
+  margin-bottom: var(--s5);
+  padding-bottom: var(--s2);
+  font-size: var(--t-sm);
+  font-weight: 640;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--line-faint);
+  cursor: default;
+  user-select: none;
 }
+.root-header > span:nth-child(2) { cursor: pointer; }
+.root-header > span:nth-child(2):hover { color: var(--ink-1); }
 
-.root-shelves {
-  border: 1px solid var(--vscode-panel-border, var(--hairline));
-  border-radius: var(--r-lg);
-  padding: var(--sp-6);
-  padding-top: var(--sp-7);
+.root-group.collapsed .root-header { margin-bottom: 0; opacity: 0.72; }
+
+.collapse-arrow {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+  color: var(--ink-4);
+  border-radius: var(--r1);
+  cursor: pointer;
+  transform: rotate(90deg);
+  transition: transform var(--dur) var(--ease), color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.collapse-arrow:hover { color: var(--ink-1); background: var(--hover-bg); }
+.collapse-arrow.collapsed { transform: rotate(0deg); }
+
+.hidden-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-6);
-  background: var(--surface-1);
-}
-
-.root-shelves.hidden {
-  display: none;
-}
-
-/* ── Hidden shelf pills ── */
-.hidden-pills {
-  display: inline-flex;
-  gap: var(--sp-2);
-  margin-left: var(--sp-4);
-  flex-wrap: wrap;
+  gap: var(--s1);
+  margin-left: auto;
+  padding-left: var(--s4);
 }
 
 .hidden-pill {
-  font-size: var(--fs-xs);
-  font-family: inherit;
-  color: var(--vscode-descriptionForeground);
-  background: var(--surface-2);
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-pill);
-  padding: var(--sp-1) var(--sp-5);
-  min-height: 22px;
-  cursor: pointer;
-  opacity: 0.55;
-  transition: opacity var(--dur-fast) var(--ease-out),
-              background var(--dur-fast) var(--ease-out),
-              border-color var(--dur-fast) var(--ease-out);
+  height: 20px;
+  padding: 0 var(--s3);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--ink-4);
+  background: transparent;
+  border: 1px dashed var(--line);
+  border-radius: var(--rp);
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-
 .hidden-pill:hover {
-  opacity: 1;
-  background: var(--surface-3);
-  border-color: var(--hairline-strong);
+  color: var(--ink-1);
+  background: var(--surface-2);
+  border-style: solid;
+  border-color: var(--line-strong);
 }
 
-/* ── Collapse arrows ── */
-.collapse-arrow {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  font-size: var(--fs-sm);
-  transition: transform var(--dur-base) var(--ease-out),
-              opacity var(--dur-fast) var(--ease-out);
-  transform: rotate(90deg);
-  opacity: 0.5;
-  cursor: pointer;
-  border-radius: var(--r-sm);
+/* Wrap-flex: full shelves claim a whole line, compact shelves tile. */
+.root-shelves {
+  /* A 12-column bed with dense packing. A wrapping flex row only pairs small
+     shelves that happen to be ADJACENT in the DOM, and the sort is
+     starred-then-alphabetical — so with a dozen 1-2 project shelves the pairing
+     came out ragged. `dense` backfills the gaps instead. */
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-flow: row dense;
+  align-items: start;
+  gap: var(--s6) var(--s5);
 }
 
-.collapse-arrow.collapsed {
-  transform: rotate(0deg);
-}
+/* ==========================================================================
+   6. SHELF ROW
+   ========================================================================== */
 
-.collapse-arrow:hover {
-  opacity: 1;
-}
-
-/* ── Shelf row ── */
 .shelf-row {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-
-/* Compact shelves (few items) flow inline */
-.shelf-row.shelf-compact {
-  width: auto;
-  flex: 0 1 auto;
-  border: 1px solid var(--vscode-panel-border, var(--hairline));
-  border-radius: var(--r-lg);
-  padding: var(--sp-5);
-  background: var(--surface-1);
-}
-
-/* A compact shelf is a narrow, shrink-to-fit box so small shelves can sit side
-   by side. Its inner grid must therefore lay its few cards out in a ROW — with
-   the normal auto-fill columns the box collapsed to one column wide and stacked
-   the cards vertically, where the preview height then clipped all but the first. */
-.shelf-row.shelf-compact .shelf-row-content {
-  grid-template-columns: none;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(var(--card-min), 1fr);
+  grid-column: span 12;
+  min-width: 0;
+  position: relative;
 }
 
 .shelf-row-title {
-  font-size: var(--fs-md);
-  font-weight: var(--fw-semibold);
-  margin-bottom: var(--sp-5);
-  color: var(--vscode-editor-foreground);
-  letter-spacing: -0.3px;
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
-  cursor: pointer;
+  gap: var(--s2);
+  margin-bottom: var(--s4);
+  font-size: var(--t-lg);
+  font-weight: 560;
+  letter-spacing: -0.005em;
+  color: var(--ink-2);
+  min-width: 0;
+}
+.shelf-row-title > span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--dur) var(--ease);
+}
+.shelf-row:hover .shelf-row-title > span:nth-child(2) { color: var(--ink-1); }
+.shelf-row-title > span:nth-child(2):hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong); }
+
+.shelf-row.collapsed .shelf-row-title { margin-bottom: 0; opacity: 0.72; }
+
+/* Starred shelves earn the one saturated colour on the page. */
+.shelf-row.starred-shelf > .shelf-row-title { color: var(--ink-1); }
+.shelf-row.starred-shelf > .shelf-row-title::before {
+  content: "";
+  width: 3px;
+  height: 15px;
+  border-radius: var(--rp);
+  background: var(--gold);
+  flex: 0 0 auto;
+  margin-right: var(--s0);
 }
 
-.shelf-row-title:hover {
-  color: var(--link);
+/* — Shelf actions: present but silent until the shelf is engaged ——— */
+
+.shelf-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s0);
+  margin-left: var(--s3);
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
 }
+.shelf-row:hover .shelf-actions,
+.shelf-row:focus-within .shelf-actions { opacity: 1; }
+/* A starred shelf keeps its star visible at rest. */
+.starred-shelf .shelf-actions .star-btn.starred { opacity: 1; }
+
+/* An ACTIVE filter must never be invisible. Hiding the controls at rest is good
+   for noise, but a shelf silently filtered by text the user can no longer see is
+   the "my section disappeared" bug wearing a different hat — so a filter box
+   holding a value keeps itself, and its row, on screen. */
+.shelf-actions:has(.shelf-filter-input:not(:placeholder-shown)) { opacity: 1; }
+.shelf-filter-input:not(:placeholder-shown) {
+  opacity: 1;
+  border-color: var(--vscode-focusBorder);
+}
+
+.action-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r2);
+  color: var(--ink-3);
+  background: transparent;
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.action-btn:hover { color: var(--ink-1); background: var(--hover-bg); }
+.action-btn:active { transform: scale(0.92); }
+.action-btn .codicon { font-size: 14px; }
+
+.star-btn.starred { color: var(--gold); }
+.star-btn.starred:hover { color: color-mix(in srgb, var(--gold) 80%, var(--fg)); }
+.hide-btn:hover { color: var(--ink-1); }
+.reveal-btn:hover { color: var(--accent); }
+
+.shelf-filter-input {
+  width: 96px;
+  height: 24px;
+  padding: 0 var(--s3);
+  font-size: var(--t-sm);
+  color: var(--ink-1);
+  background: transparent;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--rp);
+  transition: width var(--dur) var(--ease), background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.shelf-filter-input::placeholder { color: var(--ink-4); }
+.shelf-filter-input:hover { border-color: var(--line); }
+.shelf-filter-input:focus {
+  width: 168px;
+  background: var(--surface-inset);
+  border-color: var(--focus);
+}
+
+/* — The grid ———————————————————————————————————————————————
+   Clamped to one row by default. `grid-auto-rows: max-content` +
+   `align-content: start` are LOAD-BEARING: without them a capped height
+   squashes every row to fit instead of clipping.                       */
 
 .shelf-row-content {
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--card-min), 1fr));
-  gap: var(--sp-6);
-  /* Preview height fits ONE full card row (poster + info + tags). Without
-     `align-content/grid-auto-rows`, a constrained grid distributes its height
-     across every implicit row, so a 70-card shelf squeezed each card to ~11px
-     and clipped it to a colored sliver. Pack rows at their natural size and let
-     `overflow: hidden` do the clipping it was always meant to do. */
-  align-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-w), 1fr));
   grid-auto-rows: max-content;
+  align-content: start;
+  gap: var(--s5) var(--s4);
   max-height: var(--shelf-preview-h);
   overflow: hidden;
-  position: relative;
-  padding-top: var(--sp-2);
+  /* room for the deck shim on the right-most card */
+  padding-right: var(--s1);
 }
 
-/* Expanded: show every row. */
 .shelf-row-content.expanded {
   max-height: none;
   overflow: visible;
+  mask-image: none;
 }
 
-.shelf-row-content.hidden {
-  display: none;
+/* The clipped-content affordance: fade the content itself, so it works on
+   any host theme without guessing a background colour. */
+.shelf-row-content.has-overflow {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 52px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 52px), transparent 100%);
 }
 
-/* Empty state for a shelf whose inline filter matched nothing. Replaces the old
-   behaviour of rendering NOTHING, which hid the filter box itself and left the
-   user unable to clear what they had typed. */
+.shelf-showmore {
+  display: block;
+  width: 100%;
+  margin-top: var(--s3);
+  padding: var(--s2) var(--s4);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r2);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.shelf-showmore:hover {
+  color: var(--ink-1);
+  background: var(--surface-1);
+  border-color: var(--line);
+}
+
 .shelf-empty {
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
-  padding: var(--sp-6) var(--sp-2);
-  font-size: var(--fs-sm);
-  color: var(--vscode-descriptionForeground);
+  gap: var(--s3);
+  padding: var(--s4) var(--s5);
+  font-size: var(--t-md);
+  color: var(--ink-3);
+  background: var(--surface-1);
+  border: 1px dashed var(--line);
+  border-radius: var(--r3);
 }
 
 .shelf-empty-clear {
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-md);
-  background: var(--surface-2);
-  color: var(--vscode-editor-foreground);
-  font-family: inherit;
-  font-size: var(--fs-xs);
-  padding: var(--sp-2) var(--sp-4);
-  cursor: pointer;
-}
-
-.shelf-empty-clear:hover {
-  background: var(--surface-3);
-}
-
-/* "Show all N" — without this a shelf silently hid every card past row one. */
-.shelf-showmore {
-  margin-top: var(--sp-3);
-  border: none;
-  background: transparent;
-  color: var(--link);
-  font-family: inherit;
-  font-size: var(--fs-sm);
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--r-md);
-  cursor: pointer;
-}
-
-.shelf-showmore:hover {
-  background: var(--surface-2);
-}
-
-/* Fade out at bottom to hint there's more */
-.shelf-row-content.has-overflow::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 40px;
-  background: linear-gradient(transparent, var(--vscode-editor-background));
-  pointer-events: none;
-}
-
-/* ── Shelf detail modal ── */
-.shelf-modal-panel {
-  position: relative;
-  width: 80vw;
-  max-width: 1100px;
-  max-height: 85vh;
-  background: var(--vscode-editor-background);
-  border: 1px solid var(--vscode-panel-border, var(--hairline-strong));
-  border-radius: var(--r-xl);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  box-shadow: var(--shadow-modal);
-  animation: cardIn var(--dur-slow) var(--ease-out);
-}
-
-.shelf-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-5);
-  padding: var(--sp-6) var(--sp-7);
-  border-bottom: 1px solid var(--vscode-panel-border, var(--hairline));
-  flex-shrink: 0;
-}
-
-.shelf-modal-title {
-  font-size: var(--fs-xl);
-  font-weight: var(--fw-semibold);
-}
-
-.shelf-modal-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-}
-
-.shelf-modal-actions .action-btn {
-  opacity: 0.7;
-}
-
-.shelf-modal-actions .action-btn:hover {
-  opacity: 1;
-}
-
-.shelf-modal-search {
-  width: 200px;
-}
-
-.shelf-modal-grid {
-  padding: var(--sp-7);
-  overflow-y: auto;
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--card-min), 1fr));
-  gap: var(--sp-6);
-  align-content: start;
-}
-
-/* Lock body scroll when any modal is open */
-body.modal-open {
-  overflow: hidden;
-}
-
-/* ── Project card ── */
-.project-card {
-  position: relative;
-  border-radius: var(--r-lg);
-  overflow: hidden;
-  cursor: pointer;
-  background: var(--vscode-sideBar-background, var(--surface-1));
-  border: 1px solid var(--hairline);
-  box-shadow: var(--shadow-card);
-  transition: transform var(--dur-base) var(--ease-out),
-              border-color var(--dur-base) var(--ease-out),
-              box-shadow var(--dur-base) var(--ease-out),
-              opacity var(--dur-slow) var(--ease-out);
-}
-
-.project-card:hover {
-  transform: translateY(-3px);
-  border-color: var(--vscode-focusBorder);
-  box-shadow: var(--shadow-card-hover);
-}
-
-.project-card:active {
-  transform: translateY(-1px);
-}
-
-/* Cards are clickable divs; make the keyboard focus obvious. */
-.project-card:focus-visible {
-  outline: none;
-  border-color: var(--vscode-focusBorder);
-  box-shadow: var(--focus-ring), var(--shadow-card-hover);
-}
-
-/* ── Card poster with flip animation ── */
-.card-poster-flip {
-  height: var(--card-poster-h);
-  position: relative;
-  perspective: 600px;
-  overflow: hidden;
-  transform-style: preserve-3d;
-}
-
-.card-poster-face {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  backface-visibility: hidden;
-  transition: transform var(--dur-flip) var(--ease-in-out);
-}
-
-.card-poster-fallback {
-  transform: rotateY(0deg);
-}
-
-.card-poster-fallback::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, transparent 40%, rgba(0, 0, 0, 0.32));
-}
-
-.card-poster-image {
-  transform: rotateY(180deg);
-  overflow: hidden;
-}
-
-.card-poster-image svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.card-poster-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-/* When flipped, show poster, hide fallback */
-.card-poster-flip.flipped .card-poster-fallback {
-  transform: rotateY(-180deg);
-}
-
-.card-poster-flip.flipped .card-poster-image {
-  transform: rotateY(0deg);
-}
-
-.card-badge {
-  font-size: var(--fs-3xl);
-  font-weight: var(--fw-bold);
-  color: rgba(255, 255, 255, 0.92);
-  letter-spacing: 1px;
-  z-index: 1;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
-}
-
-.card-info {
-  padding: var(--sp-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-
-.card-name {
-  font-size: var(--fs-base);
-  font-weight: var(--fw-semibold);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.card-description {
-  font-size: var(--fs-xs);
-  color: var(--vscode-descriptionForeground);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.card-meta {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  font-size: var(--fs-xs);
-  color: var(--vscode-descriptionForeground);
-}
-
-.card-branch {
-  opacity: 0.9;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-
-.card-branch .codicon {
-  font-size: var(--fs-sm);
-}
-
-.card-time {
-  /* lighten via dedicated muted color, not opacity, to keep contrast honest */
-  color: var(--vscode-descriptionForeground);
-  opacity: 0.75;
-  font-size: var(--fs-2xs);
-}
-
-/* Folder/workspace open button group (bottom-right of card) */
-.card-open-group {
-  position: absolute;
-  bottom: var(--sp-3);
-  right: var(--sp-3);
-  z-index: 3;
-  display: flex;
-  opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease-out);
-}
-
-.project-card:hover .card-open-group,
-.project-card:focus-within .card-open-group {
-  opacity: 0.7;
-}
-
-.card-open-group:hover,
-.card-open-group:focus-within {
-  opacity: 1 !important;
-}
-
-.card-open-group .card-open-btn {
-  font-size: var(--fs-xl);
-  min-width: 28px;
-  min-height: 28px;
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--r-md);
-  background: color-mix(in srgb, var(--vscode-editor-background) 70%, transparent);
-  backdrop-filter: blur(3px);
-}
-
-/* Button group: flatten inner edges when both buttons present */
-.card-open-group.has-workspace .card-open-btn:first-child {
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
-}
-
-.card-open-group.has-workspace .card-open-workspace {
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-  border-left: 1px solid var(--hairline-strong);
-}
-
-.card-open-btn .codicon-folder {
-  display: inline;
-}
-
-.card-open-btn .codicon-folder-opened {
-  display: none;
-}
-
-.card-open-btn:hover .codicon-folder,
-.card-open-btn:focus-visible .codicon-folder {
-  display: none;
-}
-
-.card-open-btn:hover .codicon-folder-opened,
-.card-open-btn:focus-visible .codicon-folder-opened {
-  display: inline;
-}
-
-/* ── Action buttons (star, hide, edit) ── */
-.action-btn {
-  background: none;
-  border: none;
-  color: var(--vscode-editor-foreground);
-  cursor: pointer;
-  font-size: var(--fs-base);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  min-height: 24px;
-  padding: var(--sp-2);
-  border-radius: var(--r-sm);
-  opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease-out),
-              background var(--dur-fast) var(--ease-out),
-              color var(--dur-fast) var(--ease-out);
-}
-
-.action-btn:hover {
-  background: var(--vscode-toolbar-hoverBackground, var(--surface-2));
-  opacity: 1 !important;
-}
-
-/* Keyboard focus must reveal otherwise-hidden hover affordances */
-.action-btn:focus-visible {
-  opacity: 1 !important;
-  background: var(--vscode-toolbar-hoverBackground, var(--surface-2));
-}
-
-/* Card overlay (action icons over poster) */
-.card-overlay {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--sp-1);
-  padding: var(--sp-2);
-  z-index: 3;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, transparent 100%);
-  opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease-out);
-}
-
-.project-card:hover .card-overlay,
-.project-card:focus-within .card-overlay {
-  opacity: 1;
-}
-
-.card-overlay .action-btn {
-  font-size: var(--fs-md);
-  opacity: 0.85;
-  /* overlay sits on a dark scrim → force light glyphs for contrast */
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.card-overlay .action-btn:hover,
-.card-overlay .action-btn:focus-visible {
-  background: rgba(255, 255, 255, 0.18);
-}
-
-/* Shelf actions (inline with title) */
-.shelf-actions {
-  display: inline-flex;
-  gap: var(--sp-1);
-  margin-left: var(--sp-2);
-  vertical-align: middle;
-}
-
-.shelf-filter-input {
-  background: var(--vscode-input-background);
-  color: var(--vscode-input-foreground);
-  border: 1px solid transparent;
-  border-radius: var(--r-sm);
-  padding: var(--sp-2) var(--sp-3);
-  font-size: var(--fs-xs);
-  font-family: inherit;
-  width: 0;
-  opacity: 0;
-  transition: width var(--dur-base) var(--ease-out),
-              opacity var(--dur-base) var(--ease-out),
-              border-color var(--dur-fast) var(--ease-out);
-  outline: none;
-}
-
-.shelf-row-title:hover .shelf-filter-input,
-.shelf-row-title:focus-within .shelf-filter-input,
-.shelf-filter-input:focus,
-.shelf-filter-input:not(:placeholder-shown) {
-  width: 100px;
-  opacity: 1;
-  border-color: var(--vscode-input-border, var(--hairline));
-}
-
-.shelf-filter-input:focus {
-  border-color: var(--vscode-focusBorder);
-}
-
-.shelf-filter-input::placeholder {
-  color: var(--vscode-input-placeholderForeground);
-}
-
-.shelf-actions .action-btn {
-  font-size: var(--fs-base);
-}
-
-.shelf-row-title:hover .shelf-actions .action-btn,
-.shelf-row-title:focus-within .shelf-actions .action-btn {
-  opacity: 0.7;
-}
-
-/* Star button */
-.star-btn .codicon {
-  color: inherit;
-}
-
-.star-btn:hover .codicon,
-.star-btn:focus-visible .codicon {
-  color: var(--accent-star) !important;
-}
-
-.star-btn.starred {
-  opacity: 1 !important;
-}
-
-.star-btn.starred .codicon {
-  color: var(--accent-star);
-}
-
-/* Hide button */
-.hide-btn:hover .codicon,
-.hide-btn:focus-visible .codicon {
-  color: var(--danger) !important;
-}
-
-/* Starred shelf */
-.starred-shelf {
-  background:
-    linear-gradient(135deg,
-      color-mix(in srgb, var(--accent-star) 8%, transparent) 0%,
-      color-mix(in srgb, var(--accent-star) 3%, transparent) 30%,
-      transparent 60%
-    );
-  border-radius: var(--r-lg);
-  padding: var(--sp-4);
-  margin: calc(-1 * var(--sp-4));
-  position: relative;
-}
-
-.starred-shelf::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: var(--r-lg);
-  border: 1px solid color-mix(in srgb, var(--accent-star) 20%, transparent);
-  pointer-events: none;
-}
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--accent);
+  padding: var(--s1) var(--s3);
+  border-radius: var(--r1);
+  transition: background var(--dur) var(--ease);
+}
+.shelf-empty-clear:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+/* — Compact shelves: 1–3 projects, tiled as cells ————————————— */
+
+.shelf-row.shelf-compact {
+  /* A third of the bed: three tiny shelves per row instead of three bands. */
+  grid-column: span 4;
+  padding: var(--s4);
+  background: var(--surface-1);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r3);
+}
+
+/* A compact shelf holds 3 cards at most, so it never needs the clip/expand. */
+.shelf-row.shelf-compact .shelf-row-content {
+  max-height: none;
+  overflow: visible;
+  mask-image: none;
+}
+.shelf-compact > .shelf-row-title {
+  margin-bottom: var(--s3);
+  font-size: var(--t-md);
+  font-weight: 560;
+}
+.shelf-compact .shelf-row-content {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--card-w);
+  max-height: none;
+  overflow: visible;
+  mask-image: none;
+  -webkit-mask-image: none;
+  padding-right: var(--s1);
+}
+.shelf-compact.starred-shelf { border-color: color-mix(in srgb, var(--gold) 34%, transparent); }
+
+/* ==========================================================================
+   7. BOOKSET
+   ========================================================================== */
 
-/* ── Bookset ── */
 .bookset {
   grid-column: 1 / -1;
-  background: var(--vscode-sideBar-background, var(--surface-1));
-  border-radius: var(--r-xl);
-  padding: var(--sp-6);
-  border: 1px solid var(--vscode-panel-border, var(--hairline));
+  padding: var(--s4);
+  background: var(--surface-1);
+  border: 1px solid var(--line-faint);
+  border-left: 2px solid var(--line);
+  border-radius: var(--r2) var(--r3) var(--r3) var(--r2);
 }
 
 .bookset-header {
   display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-  margin-bottom: var(--sp-5);
+  align-items: baseline;
+  gap: var(--s3);
+  margin-bottom: var(--s4);
 }
 
 .bookset-name {
-  font-size: var(--fs-md);
-  font-weight: var(--fw-semibold);
-  color: var(--vscode-editor-foreground);
+  font-size: var(--t-sm);
+  font-weight: 620;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
 }
 
 .bookset-count {
-  font-size: var(--fs-xs);
-  background: var(--vscode-badge-background);
-  color: var(--vscode-badge-foreground);
-  padding: var(--sp-1) var(--sp-3);
-  border-radius: var(--r-pill);
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 var(--s2);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--badge-fg);
+  background: var(--badge-bg);
+  border-radius: var(--rp);
 }
 
 .bookset-projects {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--card-min), 1fr));
-  gap: var(--sp-5);
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-w), 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: var(--s5) var(--s4);
 }
 
-/* ── Empty state ── */
-.empty-state {
-  text-align: center;
-  color: var(--vscode-descriptionForeground);
-  padding: var(--sp-12) var(--sp-7);
-  font-size: var(--fs-md);
+/* ==========================================================================
+   8. PROJECT CARD
+   --------------------------------------------------------------------------
+   NOTE: the element carries an inline `transition: opacity .3s ease`, so any
+   `transition` declared here on `.project-card` itself would be overridden.
+   All hover motion is therefore on `::after` and on children.
+   ========================================================================== */
+
+.project-card {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border-radius: var(--r3);
+  perspective: 800px;
+  cursor: pointer;
+  isolation: isolate;
 }
 
-/* ── Detail modal ── */
+/* The ring: border + elevation live here so they can animate freely. */
+.project-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r3);
+  pointer-events: none;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  z-index: 2;
+}
+
+.project-card:hover::after,
+.project-card:focus-visible::after {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-2);
+}
+.project-card:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* A worktree deck is literally a stack of cards. */
+.project-card.is-deck {
+  box-shadow:
+    3px 3px 0 -1px var(--surface-1),
+    3px 3px 0 0 var(--line-faint),
+    6px 6px 0 -1px var(--surface-1),
+    6px 6px 0 0 var(--line-faint);
+}
+
+/* — Cover ————————————————————————————————————————————————— */
+
+.card-poster-flip {
+  position: relative;
+  height: var(--poster-h);
+  flex: 0 0 auto;
+  transform-style: preserve-3d;
+  transition: transform var(--dur-slow) var(--ease);
+}
+.card-poster-flip.flipped { transform: rotateY(180deg); }
+
+.card-poster-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: end start;
+  padding: var(--s2);
+  overflow: hidden;
+  border-radius: var(--r3) var(--r3) 0 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Language / hash tile. Inline background-color comes from JS; a fixed
+   vignette keeps arbitrary hues from reading flat. */
+.card-poster-fallback {
+  background-image:
+    radial-gradient(120% 90% at 80% 0%, rgba(255, 255, 255, 0.18), transparent 62%),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.26) 100%);
+  background-blend-mode: normal;
+}
+
+.card-poster-image {
+  transform: rotateY(180deg);
+  background: var(--surface-2);
+  padding: 0;
+  place-items: stretch;
+}
+.card-poster-image > * { width: 100%; height: 100%; display: block; }
+.card-poster-image svg,
+.card-poster-image img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+/* The 2-letter language badge: a plate, so it is legible on ANY tile hue
+   (JS yellow through Deno black) without per-language contrast math. */
+.card-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 var(--s2);
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: var(--r1);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.card-deck-badge {
+  position: absolute;
+  top: var(--s2);
+  left: var(--s2);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 var(--s2);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: var(--rp);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  pointer-events: none;
+}
+.card-deck-badge .codicon { font-size: 10px; }
+
+/* — Hover overlays: four corners of the cover ————————————————— */
+
+.card-overlay {
+  position: absolute;
+  top: var(--s1);
+  right: var(--s1);
+  z-index: 3;
+  display: flex;
+  gap: 1px;
+  padding: 2px;
+  border-radius: var(--rp);
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.project-card:hover .card-overlay,
+.project-card:focus-within .card-overlay { opacity: 1; transform: none; }
+/* A starred project always shows its star. */
+.card-overlay:has(.star-btn.starred) { opacity: 1; transform: none; }
+
+.card-overlay .action-btn {
+  width: 28px;
+  height: 28px;
+  color: rgba(255, 255, 255, 0.82);
+  border-radius: var(--rp);
+}
+.card-overlay .action-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.2); }
+.card-overlay .star-btn.starred { color: var(--gold); }
+
+.card-open-group {
+  position: absolute;
+  top: calc(var(--poster-h) - 32px);
+  right: var(--s1);
+  z-index: 3;
+  display: flex;
+  gap: 1px;
+  padding: 2px;
+  border-radius: var(--rp);
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.project-card:hover .card-open-group,
+.project-card:focus-within .card-open-group { opacity: 1; transform: none; }
+
+.card-open-btn {
+  width: 28px;
+  height: 28px;
+  color: rgba(255, 255, 255, 0.82);
+  border-radius: var(--rp);
+}
+.card-open-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.2); }
+/* Folder opens on hover — the two codicons are a swap pair. */
+.card-open-btn .codicon-folder-opened { display: none; }
+.card-open-btn:hover .codicon-folder { display: none; }
+.card-open-btn:hover .codicon-folder-opened { display: inline-block; }
+.card-open-workspace .codicon-folder-opened,
+.card-open-workspace:hover .codicon-folder-opened { display: inline-block; }
+.card-open-workspace .codicon-multiple-windows { display: inline-block; }
+.card-open-group.has-workspace .card-open-workspace { color: rgba(255, 255, 255, 0.82); }
+
+/* — Info block ————————————————————————————————————————————
+   Everything is single-line clamped: uniform card height is what makes a
+   300-item wall scannable.                                             */
+
+.card-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: var(--s3) var(--s3) var(--s3);
+  background: var(--surface-1);
+  border-radius: 0 0 var(--r3) var(--r3);
+  transition: background var(--dur) var(--ease);
+}
+.project-card:hover .card-info { background: var(--surface-2); }
+
+.card-name {
+  font-size: var(--t-md);
+  font-weight: 580;
+  line-height: 1.25;
+  color: var(--ink-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-description {
+  font-size: var(--t-xs);
+  line-height: 1.35;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+  font-size: var(--t-xs);
+  color: var(--ink-4);
+}
+
+.card-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.01em;
+}
+.card-branch .codicon { font-size: 10px; flex: 0 0 auto; }
+
+/* The recency read. Right-aligned + tabular so a column of them scans
+   vertically — this is how you find the 39 live projects in 297. */
+.card-time {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: var(--t-micro);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-4);
+  transition: color var(--dur) var(--ease);
+}
+.project-card:hover .card-time { color: var(--ink-2); }
+
+/* One row of chips, always. `wrap` (not `nowrap`) is load-bearing: a chip that
+   doesn't fit is pushed onto a second line that the fixed height clips away
+   entirely, so a chip is either fully shown or not shown at all — `nowrap`
+   let the row guillotine a chip mid-word ("applic", "upgrac"). */
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 3px;
+  height: 15px;
+  overflow: hidden;
+  margin-top: 1px;
+}
+
+.card-tag {
+  flex: 0 0 auto;
+  max-width: 78px;
+  padding: 0 var(--s2);
+  height: 15px;
+  line-height: 15px;
+  font-size: var(--t-micro);
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  border-radius: var(--r1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* — Worktrees ——————————————————————————————————————————————— */
+
+.card-worktrees { margin-top: var(--s1); }
+
+.worktree-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 20px;
+  padding: 0 var(--s2) 0 2px;
+  font-size: var(--t-micro);
+  font-weight: 500;
+  color: var(--ink-3);
+  border-radius: var(--r1);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.worktree-toggle:hover { color: var(--ink-1); background: var(--hover-bg); }
+.worktree-toggle .codicon { font-size: 10px; }
+
+.worktree-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 3px;
+  padding-left: var(--s2);
+  border-left: 1px solid var(--line);
+  max-height: 108px;
+  overflow-y: auto;
+}
+
+.worktree-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 20px;
+  padding: 0 var(--s2);
+  font-family: var(--mono);
+  font-size: var(--t-micro);
+  color: var(--ink-3);
+  text-align: left;
+  border-radius: var(--r1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.worktree-item:hover { color: var(--ink-1); background: var(--hover-bg); }
+.worktree-item .codicon { font-size: 10px; flex: 0 0 auto; }
+
+/* — Card states ————————————————————————————————————————————— */
+
+/* A card with real poster art carries its own imagery, so the info block
+   steps back a half-tone and lets the cover lead. */
+.project-card.has-poster .card-info { background: var(--surface-0); }
+.project-card.has-poster:hover .card-info { background: var(--surface-1); }
+.project-card.has-poster .card-poster-flip { box-shadow: inset 0 -1px 0 var(--line-faint); }
+
+/* Poster generation in flight. */
+.project-card.forging .card-poster-face::after,
+.detail-poster.forging .detail-poster-content::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.22) 50%,
+    transparent 70%
+  );
+  background-size: 260% 100%;
+  animation: cs-shimmer 1500ms ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes cs-shimmer {
+  from { background-position: 160% 0; }
+  to   { background-position: -60% 0; }
+}
+
+/* Freshly discovered on the last scan. */
+.project-card.new-project::after {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), var(--shadow-2);
+  animation: cs-new-pulse 1400ms var(--ease) infinite;
+}
+@keyframes cs-new-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), var(--shadow-2); }
+  50%      { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 6%, transparent), var(--shadow-2); }
+}
+
+/* First-paint stagger. Delay is capped so a 297-card library still settles
+   in well under a second (App.tsx only uses its own constant for cleanup). */
+.project-card.stagger-in {
+  animation: cs-rise 340ms var(--ease) both;
+  animation-delay: calc(min(var(--stagger-i, 0), 42) * 14ms);
+}
+@keyframes cs-rise {
+  from { opacity: 0; transform: translateY(9px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ==========================================================================
+   9. DETAIL MODAL (project)
+   ========================================================================== */
+
 .detail-modal {
   position: fixed;
   inset: 0;
-  z-index: 1000;
-  display: flex;
+  z-index: 100;
   align-items: center;
   justify-content: center;
-  animation: fadeIn var(--dur-base) var(--ease-out);
+  padding: var(--s6);
 }
 
 .detail-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--scrim);
   backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: cs-fade 140ms var(--ease) both;
 }
+@keyframes cs-fade { from { opacity: 0; } to { opacity: 1; } }
 
 .detail-panel {
   position: relative;
-  width: 500px;
-  max-width: 90vw;
-  max-height: 90vh;
-  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
-  border: 1px solid var(--vscode-panel-border, var(--hairline-strong));
-  border-radius: var(--r-xl);
-  overflow: hidden;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-modal);
-  animation: cardIn var(--dur-slow) var(--ease-out);
+  width: min(580px, 100%);
+  max-height: min(88vh, 780px);
+  overflow: hidden auto;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r4);
+  box-shadow: var(--shadow-4);
+  animation: cs-pop 200ms var(--ease) both;
+}
+@keyframes cs-pop {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
 }
 
 .detail-poster {
-  min-height: 340px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
   position: relative;
+  flex: 0 0 auto;
+  aspect-ratio: 16 / 9;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line-faint);
+  overflow: hidden;
 }
 
 .detail-poster-content {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
 }
-
+.detail-poster-content > div { width: 100%; height: 100%; }
 .detail-poster-content svg,
-.detail-poster-content > div {
-  display: block;
+.detail-poster-content img {
   width: 100%;
   height: 100%;
-}
-
-.detail-poster-content > div svg {
   display: block;
-  width: 100%;
-  height: 100%;
+  object-fit: cover;
 }
-
 .detail-poster-content .card-badge {
-  font-size: var(--fs-4xl);
-  font-weight: var(--fw-bold);
-  color: rgba(255, 255, 255, 0.92);
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  min-width: 56px;
+  height: 46px;
+  font-size: 22px;
+  letter-spacing: 0.08em;
+  border-radius: var(--r3);
 }
 
-/* Poster overlay buttons */
-.detail-poster-btn {
-  position: absolute;
-  z-index: 2;
-  background: rgba(0, 0, 0, 0.45);
-  border: none;
-  color: rgba(255, 255, 255, 0.92);
-  cursor: pointer;
-  font-size: var(--fs-lg);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 28px;
-  min-height: 28px;
-  padding: var(--sp-3);
-  border-radius: var(--r-md);
-  opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease-out),
-              background var(--dur-fast) var(--ease-out);
-}
-
-.detail-poster:hover .detail-poster-btn,
-.detail-poster:focus-within .detail-poster-btn {
-  opacity: 0.85;
-}
-
-.detail-poster-btn:hover,
-.detail-poster-btn:focus-visible {
-  opacity: 1 !important;
-  background: rgba(0, 0, 0, 0.7);
-}
+/* — Poster action buttons ————————————————————————————————— */
 
 .detail-poster-btn-group {
   position: absolute;
-  top: var(--sp-4);
-  left: var(--sp-4);
-  z-index: 2;
-  display: flex;
-  align-items: flex-start;
+  top: var(--s4);
+  right: calc(var(--s4) + 36px);
+  z-index: 4;
 }
 
-.detail-poster-btn-group .detail-poster-btn {
-  position: static;
+.detail-poster-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  color: rgba(255, 255, 255, 0.86);
+  background: rgba(0, 0, 0, 0.46);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--rp);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.detail-poster-btn:hover { color: #fff; background: rgba(0, 0, 0, 0.68); }
+.detail-poster-btn:active { transform: scale(0.93); }
+
+.detail-close {
+  position: absolute;
+  top: var(--s4);
+  right: var(--s4);
+  z-index: 4;
 }
 
 .detail-generate-dropdown {
   position: absolute;
-  top: 100%;
-  left: 0;
-  margin-top: var(--sp-1);
+  top: calc(100% + var(--s2));
+  right: 0;
+  z-index: 6;
   flex-direction: column;
-  background: var(--vscode-menu-background, var(--vscode-editor-background));
-  border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border, var(--hairline-strong)));
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-dropdown);
-  min-width: 200px;
-  overflow: hidden;
+  min-width: 214px;
+  padding: var(--s1);
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  box-shadow: var(--shadow-3);
+  animation: cs-pop 140ms var(--ease) both;
 }
 
 .dropdown-item {
-  background: none;
-  border: none;
-  color: var(--vscode-menu-foreground, var(--vscode-editor-foreground));
-  cursor: pointer;
-  padding: var(--sp-4) var(--sp-5);
-  font-size: var(--fs-sm);
-  font-family: inherit;
-  text-align: left;
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
+  gap: var(--s3);
   width: 100%;
+  min-height: 30px;
+  padding: 0 var(--s3);
+  font-size: var(--t-md);
+  color: var(--ink-2);
+  text-align: left;
+  border-radius: var(--r2);
+  white-space: nowrap;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.dropdown-item:hover { color: var(--ink-1); background: var(--hover-bg); }
+.dropdown-item .codicon { font-size: 14px; color: var(--ink-3); }
+.dropdown-item:hover .codicon { color: var(--accent); }
+
+/* — Prompt editor (overlays the poster) ————————————————————— */
+
+.prompt-editor {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s5);
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: cs-fade 140ms var(--ease) both;
 }
 
-.dropdown-item:hover,
-.dropdown-item:focus-visible {
-  background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground));
-  outline: none;
+.prompt-input {
+  flex: 1 1 auto;
+  min-height: 60px;
+  resize: none;
+  padding: var(--s3) var(--s4);
+  font-family: var(--font);
+  font-size: var(--t-md);
+  line-height: 1.5;
+  color: var(--ink-1);
+  background: var(--surface-inset);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+}
+.prompt-input::placeholder { color: var(--ink-4); }
+.prompt-input:focus { border-color: var(--focus); outline: none; }
+
+.prompt-editor-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  flex-wrap: wrap;
 }
 
-.detail-close {
-  top: var(--sp-4);
-  right: var(--sp-4);
+.prompt-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
 }
+
+.prompt-spoiler { min-width: 0; }
+
+.prompt-spoiler-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 28px;
+  font-size: var(--t-sm);
+  color: var(--ink-3);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  padding: 0 var(--s2);
+  border-radius: var(--r1);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.prompt-spoiler-toggle::-webkit-details-marker { display: none; }
+.prompt-spoiler-toggle:hover { color: var(--ink-1); background: var(--hover-bg); }
+.prompt-spoiler[open] .prompt-spoiler-toggle { color: var(--ink-1); }
+
+.prompt-section {
+  margin-top: var(--s2);
+  max-height: 130px;
+  overflow: auto;
+  padding: var(--s3);
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  color: var(--ink-3);
+  background: var(--surface-inset);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--r2);
+}
+
+/* — Detail info ————————————————————————————————————————————— */
 
 .detail-info {
-  padding: var(--sp-6) var(--sp-7);
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--s3);
+  padding: var(--s5) var(--s6) var(--s6);
+}
+
+.detail-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s4);
 }
 
 .detail-name {
-  font-size: var(--fs-2xl);
-  font-weight: var(--fw-semibold);
-  letter-spacing: -0.5px;
+  font-size: var(--t-xl);
+  font-weight: 620;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  color: var(--ink-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
+.detail-open-group {
+  flex: 0 0 auto;
+  display: flex;
+  gap: var(--s1);
+  padding: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--rp);
+}
+
+.detail-open-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  color: var(--ink-2);
+  border-radius: var(--rp);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.detail-open-btn:hover { color: var(--btn-fg); background: var(--btn-bg); }
+.detail-open-btn .codicon-folder-opened { display: none; }
+.detail-open-btn:hover .codicon-folder { display: none; }
+.detail-open-btn:hover .codicon-folder-opened { display: inline-block; }
+.detail-open-workspace .codicon-multiple-windows { display: inline-block; }
+.detail-open-workspace:hover .codicon-folder-opened { display: none; }
+
 .detail-path {
-  font-size: var(--fs-xs);
-  color: var(--vscode-descriptionForeground);
-  /* was opacity 0.5 on 11px mono — unreadable. Keep it muted but legible. */
-  opacity: 0.75;
-  font-family: var(--vscode-editor-font-family, monospace);
-  word-break: break-all;
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: var(--ink-4);
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 
 .detail-meta {
-  font-size: var(--fs-sm);
-  color: var(--vscode-descriptionForeground);
   display: flex;
   align-items: center;
-  gap: var(--sp-5);
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s4);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--line-faint);
+  font-size: var(--t-sm);
+  color: var(--ink-3);
 }
 
 .detail-branch {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--s1);
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  padding: 2px var(--s2);
+  background: var(--surface-2);
+  border-radius: var(--r1);
 }
+.detail-branch .codicon { font-size: 11px; }
 
 .detail-time {
-  opacity: 0.8;
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
 }
 
 .detail-lang {
-  opacity: 0.8;
-  font-size: var(--fs-xs);
+  margin-left: auto;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
 }
 
-.detail-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-4);
-}
+/* ==========================================================================
+   10. SHELF MODAL
+   ========================================================================== */
 
-.detail-open-group {
-  display: flex;
-  flex-shrink: 0;
-}
-
-.detail-open-btn {
-  background: var(--vscode-button-background);
-  border: none;
-  color: var(--vscode-button-foreground);
-  cursor: pointer;
-  font-size: var(--fs-xl);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 36px;
-  min-height: 32px;
-  padding: var(--sp-3) var(--sp-4);
-  border-radius: var(--r-md);
-  transition: background var(--dur-fast) var(--ease-out);
-}
-
-.detail-open-btn:hover {
-  background: var(--vscode-button-hoverBackground);
-}
-
-.detail-open-group.has-workspace .detail-open-btn:first-child {
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
-}
-
-.detail-open-group.has-workspace .detail-open-workspace {
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-  border-left: 1px solid var(--hairline-strong);
-}
-
-.detail-open-btn .codicon-folder {
-  display: inline;
-}
-
-.detail-open-btn .codicon-folder-opened {
-  display: none;
-}
-
-.detail-open-btn:hover .codicon-folder,
-.detail-open-btn:focus-visible .codicon-folder {
-  display: none;
-}
-
-.detail-open-btn:hover .codicon-folder-opened,
-.detail-open-btn:focus-visible .codicon-folder-opened {
-  display: inline;
-}
-
-/* ── Prompt editor (inside detail-poster) ── */
-.prompt-editor {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  background: var(--vscode-editor-background);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: var(--sp-5) var(--sp-6);
-  gap: var(--sp-4);
-}
-
-.prompt-input {
-  background: var(--vscode-input-background);
-  color: var(--vscode-input-foreground);
-  border: 1px solid var(--vscode-input-border, var(--hairline));
-  border-radius: var(--r-md);
-  padding: var(--sp-4) var(--sp-5);
-  font-size: var(--fs-base);
-  font-family: inherit;
-  resize: vertical;
-  outline: none;
-  width: 100%;
-  flex: 1;
-  min-height: 80px;
-}
-
-.prompt-input:focus {
-  border-color: var(--vscode-focusBorder);
-  box-shadow: 0 0 0 1px var(--vscode-focusBorder);
-}
-
-.prompt-input::placeholder {
-  color: var(--vscode-input-placeholderForeground);
-}
-
-.prompt-editor-row {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-}
-
-.prompt-actions {
-  display: flex;
-  gap: var(--sp-4);
-}
-
-.prompt-actions .btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-3);
-  font-size: var(--fs-sm);
-  padding: var(--sp-4) var(--sp-6);
-}
-
-.prompt-spoiler {
-  font-size: var(--fs-xs);
-}
-
-.prompt-spoiler-toggle {
-  cursor: pointer;
-  color: var(--vscode-descriptionForeground);
-  opacity: 0.75;
-  font-size: var(--fs-xs);
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  user-select: none;
-}
-
-.prompt-spoiler-toggle:hover {
-  opacity: 1;
-}
-
-.prompt-section {
-  font-size: var(--fs-2xs);
-  font-family: var(--vscode-editor-font-family, monospace);
-  color: var(--vscode-descriptionForeground);
-  white-space: pre-wrap;
-  line-height: 1.4;
-  padding: var(--sp-3) var(--sp-4);
-  margin-top: var(--sp-2);
-  background: var(--surface-2);
-  border-radius: var(--r-sm);
-  border-left: 2px solid var(--vscode-panel-border, var(--hairline));
-  opacity: 0.85;
-}
-
-/* ── Forge animation (poster generating) ── */
-.forging .card-poster-flip,
-.detail-poster.forging .detail-poster-content {
+.shelf-modal-panel {
   position: relative;
-  overflow: hidden;
-}
-
-.forging .card-poster-flip::after,
-.detail-poster.forging::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  background:
-    linear-gradient(
-      110deg,
-      transparent 20%,
-      rgba(200, 170, 100, 0.08) 30%,
-      rgba(255, 220, 130, 0.15) 50%,
-      rgba(200, 170, 100, 0.08) 70%,
-      transparent 80%
-    );
-  background-size: 200% 100%;
-  animation: forge-shimmer 1.8s var(--ease-in-out) infinite;
-  pointer-events: none;
-}
-
-.forging .card-poster-flip::before,
-.detail-poster.forging::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  border: 1px solid color-mix(in srgb, var(--accent-star) 25%, transparent);
-  border-radius: inherit;
-  animation: forge-pulse 2s var(--ease-in-out) infinite;
-  pointer-events: none;
-}
-
-@keyframes forge-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-@keyframes forge-pulse {
-  0%, 100% { border-color: color-mix(in srgb, var(--accent-star) 15%, transparent); }
-  50% { border-color: color-mix(in srgb, var(--accent-star) 40%, transparent); }
-}
-
-/* ── Animations ── */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes cardIn {
-  from { opacity: 0; transform: scale(0.96); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-/* ── Staggered card entrance (JS adds .stagger-in + --stagger-i) ── */
-.project-card.stagger-in {
-  opacity: 0;
-  animation: stagger-pop 0.35s var(--ease-spring) forwards;
-  animation-delay: calc(var(--stagger-i, 0) * var(--stagger-step));
-}
-
-@keyframes stagger-pop {
-  0% { opacity: 0; transform: scale(0.9) translateY(8px); }
-  100% { opacity: 1; transform: scale(1) translateY(0); }
-}
-
-/* ── New Project Sparkle ── */
-.project-card.new-project {
-  animation: new-project-pop 0.6s var(--ease-spring) forwards;
-  z-index: 2;
-}
-
-.project-card.new-project::after {
-  content: '';
-  position: absolute;
-  inset: -3px;
-  border-radius: 10px;
-  background: linear-gradient(
-    135deg,
-    rgba(232, 182, 39, 0.6),
-    rgba(255, 120, 200, 0.4),
-    rgba(100, 200, 255, 0.4),
-    rgba(232, 182, 39, 0.6)
-  );
-  background-size: 300% 300%;
-  animation: sparkle-border 2s var(--ease-in-out) infinite, sparkle-fade 4s var(--ease-out) forwards;
-  z-index: -1;
-  pointer-events: none;
-}
-
-.project-card.new-project::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: var(--r-xl);
-  box-shadow:
-    0 0 15px rgba(232, 182, 39, 0.3),
-    0 0 30px rgba(232, 182, 39, 0.15),
-    0 0 60px rgba(232, 182, 39, 0.05);
-  animation: sparkle-glow 2s var(--ease-in-out) infinite, sparkle-fade 4s var(--ease-out) forwards;
-  pointer-events: none;
-  z-index: 3;
-}
-
-@keyframes new-project-pop {
-  0% { opacity: 0; transform: scale(0.5); }
-  50% { opacity: 1; transform: scale(1.05); }
-  100% { opacity: 1; transform: scale(1); }
-}
-
-@keyframes sparkle-border {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
-@keyframes sparkle-glow {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
-}
-
-@keyframes sparkle-fade {
-  0%, 60% { opacity: 1; }
-  100% { opacity: 0; }
-}
-
-/* ── Narrow widths (sidebar / split editor) ── */
-@media (max-width: 600px) {
-  .shelf-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--sp-4);
-  }
-
-  .shelf-controls {
-    justify-content: space-between;
-  }
-
-  .search-input {
-    width: 100%;
-    max-width: none;
-  }
-
-  .shelf-content {
-    padding: var(--sp-5);
-    gap: var(--sp-6);
-  }
-
-  .root-shelves {
-    padding: var(--sp-4);
-    gap: var(--sp-4);
-  }
-
-  :root {
-    --card-min: 150px;
-  }
-
-  .shelf-modal-panel {
-    width: 94vw;
-    max-height: 92vh;
-  }
-
-  .detail-panel {
-    width: 94vw;
-  }
-}
-
-/* ── Reduced motion ──
-   Honors the OS/VS Code "reduce motion" setting. Kills the
-   showy stuff (flip, shimmer, sparkle, stagger, spin churn)
-   while keeping instant state changes usable. */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
-  }
-
-  /* Spinner still needs to convey "working" — slow it, don't freeze it. */
-  .loading-spinner {
-    animation: spin 1.6s linear infinite !important;
-  }
-
-  /* Poster flip is decorative 3D; show the correct face statically. */
-  .card-poster-face {
-    transition: none !important;
-  }
-
-  .card-poster-flip.flipped .card-poster-fallback {
-    display: none;
-  }
-
-  /* Don't translate cards on hover; keep the border/shadow cue. */
-  .project-card:hover {
-    transform: none;
-  }
-}
-
-/* ============================================================
-   Cmd/Ctrl+K command palette — global project quick-switcher
-   ============================================================ */
-.cmdk-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding: 12vh var(--sp-6) var(--sp-6);
-  background: color-mix(in srgb, var(--vscode-editor-background) 55%, transparent);
-  backdrop-filter: blur(3px);
-  animation: cmdk-fade var(--dur-fast) var(--ease-out);
-}
-
-.cmdk-panel {
-  width: 100%;
-  max-width: 640px;
-  max-height: 70vh;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  background: var(--vscode-menu-background, var(--vscode-editor-background));
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--r-xl);
-  box-shadow: var(--shadow-modal);
+  width: min(1280px, 100%);
+  height: min(88vh, 940px);
   overflow: hidden;
-  animation: cmdk-pop var(--dur-base) var(--ease-spring);
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r4);
+  box-shadow: var(--shadow-4);
+  animation: cs-pop 200ms var(--ease) both;
 }
 
-.cmdk-input-row {
+.shelf-modal-header {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: var(--sp-5);
-  padding: var(--sp-5) var(--sp-6);
-  border-bottom: 1px solid var(--hairline);
+  gap: var(--s5);
+  padding: var(--s5) var(--s6);
+  background: color-mix(in srgb, var(--sidebar) 60%, var(--surface-1));
+  border-bottom: 1px solid var(--line);
 }
 
-.cmdk-input-row .codicon-search {
-  font-size: var(--fs-lg);
-  color: var(--vscode-descriptionForeground);
-}
-
-.cmdk-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--vscode-input-foreground, var(--vscode-editor-foreground));
-  font-family: inherit;
-  font-size: var(--fs-lg);
-}
-
-.cmdk-input::placeholder {
-  color: var(--vscode-input-placeholderForeground);
-}
-
-.cmdk-count {
-  font-size: var(--fs-xs);
-  color: var(--vscode-descriptionForeground);
+.shelf-modal-title {
+  font-size: var(--t-xl);
+  font-weight: 620;
+  letter-spacing: -0.015em;
+  color: var(--ink-1);
+  margin-right: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.cmdk-results {
+.shelf-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+}
+
+.shelf-modal-search { width: 220px; }
+.shelf-modal-search:focus { width: 280px; }
+
+.shelf-modal-actions .action-btn.starred { color: var(--gold); }
+
+.shelf-modal-grid {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  padding: var(--sp-2);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-w), 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: var(--s5) var(--s4);
+  padding: var(--s6);
+}
+.shelf-modal-grid > div { min-width: 0; display: flex; }
+.shelf-modal-grid > div > .project-card { flex: 1 1 auto; min-width: 0; }
+
+/* ==========================================================================
+   11. COMMAND PALETTE
+   ========================================================================== */
+
+.cmdk-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 11vh var(--s6) var(--s6);
+  background: var(--scrim);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: cs-fade 120ms var(--ease) both;
+}
+
+.cmdk-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(740px, 100%);
+  max-height: 68vh;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r4);
+  box-shadow: var(--shadow-4);
+  animation: cs-pop 160ms var(--ease) both;
+}
+
+.cmdk-input-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s4) var(--s5);
+  border-bottom: 1px solid var(--line);
+}
+.cmdk-input-row > .codicon { font-size: 15px; color: var(--ink-4); flex: 0 0 auto; }
+
+.cmdk-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--ink-1);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+.cmdk-input::placeholder { color: var(--ink-4); }
+
+.cmdk-count {
+  flex: 0 0 auto;
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--ink-4);
+  padding: 2px var(--s2);
+  background: var(--surface-3);
+  border-radius: var(--r1);
+}
+
+.cmdk-results {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s1);
+  scroll-padding: var(--s2);
 }
 
 .cmdk-empty {
-  padding: var(--sp-8) var(--sp-6);
+  padding: var(--s7) var(--s5);
   text-align: center;
-  color: var(--vscode-descriptionForeground);
-  font-size: var(--fs-sm);
+  font-size: var(--t-md);
+  color: var(--ink-4);
 }
 
 .cmdk-item {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: var(--sp-4) var(--sp-5);
-  border-radius: var(--r-md);
+  padding: var(--s2) var(--s4);
+  border-radius: var(--r2);
   cursor: pointer;
+  border-left: 2px solid transparent;
+}
+.cmdk-item.selected {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-left-color: var(--accent);
 }
 
 .cmdk-row-main {
   display: flex;
   align-items: center;
-  gap: var(--sp-5);
-}
-
-.cmdk-item.selected {
-  background: var(--vscode-list-hoverBackground, var(--surface-2));
-}
-
-/* Corpus match excerpt — aligned past the badge, single muted line. */
-.cmdk-snippet {
-  padding-left: calc(26px + var(--sp-5));
-  font-size: var(--fs-xs);
-  color: var(--vscode-descriptionForeground);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  gap: var(--s3);
+  min-width: 0;
+  min-height: 26px;
 }
 
 .cmdk-badge {
   flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
   width: 26px;
-  height: 26px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
-  font-family: var(--vscode-editor-font-family, monospace);
-  font-size: var(--fs-2xs);
-  font-weight: var(--fw-semibold);
-  color: var(--vscode-editor-foreground);
+  height: 20px;
+  font-family: var(--mono);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+  background: var(--surface-3);
+  border-radius: var(--r1);
 }
+.cmdk-item.selected .cmdk-badge { color: var(--ink-1); }
 
 .cmdk-name {
-  flex: 1 1 auto;
-  font-size: var(--fs-base);
-  white-space: nowrap;
+  flex: 0 1 auto;
+  font-size: var(--t-lg);
+  font-weight: 550;
+  color: var(--ink-1);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cmdk-branch {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--fs-xs);
-  color: var(--vscode-descriptionForeground);
-}
-
-.cmdk-context {
-  flex: 0 0 auto;
-  font-size: var(--fs-xs);
-  color: var(--vscode-descriptionForeground);
-  opacity: 0.85;
+  gap: 3px;
+  font-family: var(--mono);
+  font-size: var(--t-micro);
+  color: var(--ink-4);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
+.cmdk-branch .codicon { font-size: 10px; }
 
-.cmdk-item .codicon-multiple-windows {
-  flex: 0 0 auto;
-  color: var(--link);
-  font-size: var(--fs-md);
+.cmdk-context {
+  margin-left: auto;
+  flex: 0 1 auto;
+  font-size: var(--t-xs);
+  color: var(--ink-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
 }
+
+.cmdk-row-main > .codicon-multiple-windows {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--ink-4);
+}
+
+.cmdk-snippet {
+  padding-left: calc(26px + var(--s3));
+  font-family: var(--mono);
+  font-size: var(--t-micro);
+  line-height: 1.5;
+  color: var(--ink-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmdk-item.selected .cmdk-snippet { color: var(--ink-3); }
 
 .cmdk-footer {
+  flex: 0 0 auto;
   display: flex;
-  gap: var(--sp-6);
-  padding: var(--sp-4) var(--sp-6);
-  border-top: 1px solid var(--hairline);
-  font-size: var(--fs-2xs);
-  color: var(--vscode-descriptionForeground);
-}
-
-.cmdk-footer kbd {
-  display: inline-block;
-  min-width: 16px;
-  padding: 1px var(--sp-2);
-  margin-right: 2px;
-  text-align: center;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--hairline-strong);
+  align-items: center;
+  gap: var(--s5);
+  padding: var(--s2) var(--s5);
+  font-size: var(--t-xs);
+  color: var(--ink-4);
   background: var(--surface-1);
-  font-family: var(--vscode-editor-font-family, monospace);
+  border-top: 1px solid var(--line-faint);
+}
+.cmdk-footer span { display: inline-flex; align-items: center; gap: var(--s1); }
+
+kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 17px;
+  padding: 0 var(--s1);
+  font-family: var(--mono);
+  font-size: var(--t-micro);
+  color: var(--ink-3);
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: var(--r1);
 }
 
-@keyframes cmdk-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
+/* ==========================================================================
+   12. RESPONSIVE
+   ========================================================================== */
+
+@media (max-width: 900px) {
+  :root { --card-w: 138px; --poster-h: 92px; --shelf-preview-h: 192px; }
+  .shelf-content { padding: var(--s5) var(--s5) var(--s7); }
+  .shelf-header { padding: var(--s3) var(--s5); gap: var(--s3); }
+  .search-input { width: 150px; }
+  .search-input:focus { width: 190px; }
 }
 
-@keyframes cmdk-pop {
-  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+@media (max-width: 620px) {
+  .shelf-header { flex-wrap: wrap; }
+  .shelf-logo { margin-right: 0; }
+  .shelf-controls { width: 100%; }
+  .search-wrapper { flex: 1 1 auto; }
+  .search-input, .search-input:focus { width: 100%; }
+  .detail-modal, .cmdk-overlay { padding: var(--s4); }
+  .cmdk-overlay { padding-top: 6vh; }
 }
+
+/* ==========================================================================
+   13. REDUCED MOTION
+   ========================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
-  .cmdk-overlay,
-  .cmdk-panel {
-    animation: none;
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* The flip becomes a straight swap. */
+  .card-poster-flip { transform: none !important; }
+  .card-poster-flip.flipped .card-poster-fallback { opacity: 0; }
+  .card-poster-image { transform: none; }
+  /* Keep the "new" signal legible without pulsing. */
+  .project-card.new-project::after {
+    animation: none !important;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent);
+  }
+  .loading-spinner {
+    animation: none !important;
+    border-color: var(--accent);
+    border-top-color: var(--line);
   }
 }
 
-/* ── Auto-derived keyword tags (TF-IDF) ── */
-.card-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  margin-top: var(--sp-3);
-  max-height: calc(2 * (var(--fs-2xs) * 1.4 + 2 * var(--sp-2)));
-  overflow: hidden;
-}
+/* ==========================================================================
+   14. HIGH CONTRAST / FORCED COLORS
+   ========================================================================== */
 
-.card-tag {
-  font-size: var(--fs-2xs);
-  line-height: 1.4;
-  padding: 1px var(--sp-3);
-  border-radius: var(--r-pill);
-  background: var(--surface-2);
-  color: var(--vscode-descriptionForeground);
-  white-space: nowrap;
-}
-
-/* ── Worktree deck ──
-   A project with git worktrees reads as a stacked deck. The "stack" is drawn
-   with offset box-shadows (painted outside the border-box) so it survives the
-   card's own `overflow: hidden`, with no extra DOM and no clipping. */
-.project-card.is-deck {
-  box-shadow:
-    5px -5px 0 0 var(--surface-2),
-    5px -5px 0 1px var(--hairline),
-    10px -10px 0 0 var(--surface-2),
-    10px -10px 0 1px var(--hairline),
-    var(--shadow-card);
-}
-
-.project-card.is-deck:hover {
-  box-shadow:
-    5px -5px 0 0 var(--surface-2),
-    5px -5px 0 1px var(--hairline),
-    10px -10px 0 0 var(--surface-2),
-    10px -10px 0 1px var(--hairline),
-    var(--shadow-card-hover);
-}
-
-/* Always-visible count, so a deck reads as "N worktrees" even in the clipped
-   shelf-row preview where the expandable toggle below the info is cut off. */
-.card-deck-badge {
-  position: absolute;
-  top: var(--sp-2);
-  left: var(--sp-2);
-  z-index: 3;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: var(--fs-2xs);
-  font-weight: 600;
-  line-height: 1;
-  padding: 3px var(--sp-2);
-  border-radius: var(--r-pill);
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  pointer-events: none;
-}
-
-.card-worktrees {
-  margin-top: var(--sp-2);
-}
-
-.worktree-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-1);
-  font-size: var(--fs-2xs);
-  line-height: 1.4;
-  padding: 1px var(--sp-2);
-  border: none;
-  border-radius: var(--r-pill);
-  background: transparent;
-  color: var(--vscode-descriptionForeground);
-  cursor: pointer;
-}
-
-.worktree-toggle:hover {
-  background: var(--surface-2);
-  color: var(--vscode-foreground);
-}
-
-.worktree-list {
-  list-style: none;
-  margin: var(--sp-2) 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.worktree-item {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-  width: 100%;
-  text-align: left;
-  font-size: var(--fs-2xs);
-  line-height: 1.4;
-  padding: 2px var(--sp-2);
-  border: 1px solid transparent;
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
-  color: var(--vscode-descriptionForeground);
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.worktree-item:hover {
-  border-color: var(--vscode-focusBorder);
-  color: var(--vscode-foreground);
+@media (forced-colors: active) {
+  .project-card::after,
+  .cmdk-panel,
+  .detail-panel,
+  .shelf-modal-panel { border: 1px solid CanvasText; }
+  .card-overlay, .card-open-group, .card-deck-badge, .card-badge { forced-color-adjust: none; }
+  :focus-visible { outline: 2px solid Highlight; }
 }

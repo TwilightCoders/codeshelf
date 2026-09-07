@@ -30,10 +30,11 @@ export default tseslint.config(
     },
   },
   {
-    // Node build/utility scripts
+    // Node build/utility scripts. Some drive a headless browser, so the bodies
+    // of `page.evaluate()` callbacks legitimately reference DOM globals.
     files: ['*.mjs', 'scripts/**/*.mjs'],
     languageOptions: {
-      globals: { ...globals.node },
+      globals: { ...globals.node, ...globals.browser },
     },
   },
 );
