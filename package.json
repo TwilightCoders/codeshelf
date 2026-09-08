@@ -28,6 +28,14 @@
     "theme": "dark"
   },
   "qna": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TwilightCoders/codeshelf.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TwilightCoders/codeshelf/issues"
+  },
+  "homepage": "https://github.com/TwilightCoders/codeshelf#readme",
   "engines": {
     "vscode": "^1.108.0"
   },
