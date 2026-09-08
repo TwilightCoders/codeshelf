@@ -27,6 +27,7 @@
     "color": "#15171c",
     "theme": "dark"
   },
+  "preview": true,
   "qna": false,
   "repository": {
     "type": "git",
