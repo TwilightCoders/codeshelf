@@ -37,7 +37,7 @@ Useful scripts:
 
 | Script | What it does |
 | --- | --- |
-| `node scripts/theme-preview.mjs <css> <out.png> [--light]` | Render a stylesheet against your real scanned library, light or dark |
+| `CODESHELF_ROOTS=~/code node scripts/theme-preview.mjs <css> <out.png> [--light]` | Render a stylesheet against a real scanned library, light or dark |
 | `node scripts/theme-coverage.mjs <css>` | Report classes the components use that a stylesheet never styles |
 | `node scripts/demo-shots.mjs` | Regenerate the README screenshots from synthetic data |
 | `node scripts/derive-keywords.mjs` | Regenerate the programming-keyword denylist from VS Code's bundled grammars |

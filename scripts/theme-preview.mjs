@@ -8,6 +8,7 @@
 import puppeteer from 'puppeteer-core';
 import { resolve } from 'path';
 import { readFileSync } from 'fs';
+import { homedir } from 'os';
 import { createRequire } from 'module';
 import { chromeExecutablePath, CHROME_LAUNCH_OPTIONS } from './chrome.mjs';
 
@@ -19,10 +20,17 @@ if (!cssPath || !outPath) { console.error('usage: theme-preview.mjs <theme.css> 
 const css = readFileSync(cssPath, 'utf8');
 
 const scanner = require(resolve(import.meta.dirname, '..', 'out/services/projectScanner.js'));
-const shelves = await scanner.scanRoots({
-  '/Users/alex/code': {},
-  '/Users/alex/Workspace': { label: '🔨 Workspace', shelves: { Archive: { hidden: true }, Legacy: { hidden: true } } },
-}, 3);
+// Roots come from the environment, not from whoever wrote this script.
+// CODESHELF_ROOTS=~/code:~/work  node scripts/theme-preview.mjs theme.css out.png
+const roots = (process.env.CODESHELF_ROOTS ?? '')
+  .split(':').map(r => r.trim()).filter(Boolean)
+  .map(r => r.startsWith('~') ? resolve(homedir(), r.slice(1).replace(/^\//, '')) : r);
+if (roots.length === 0) {
+  console.error('Set CODESHELF_ROOTS to the folders to scan, e.g.');
+  console.error('  CODESHELF_ROOTS=~/code node scripts/theme-preview.mjs media/styles/main.css out.png');
+  process.exit(1);
+}
+const shelves = await scanner.scanRoots(Object.fromEntries(roots.map(r => [r, {}])), 3);
 
 const browser = await puppeteer.launch({ executablePath: chromeExecutablePath(), ...CHROME_LAUNCH_OPTIONS });
 const page = await browser.newPage();
@@ -32,7 +40,12 @@ await page.goto('file://' + resolve(import.meta.dirname, '..', 'dev.html') + (li
 // puts the light set on `body.vscode-light`, which breaks any theme that aliases
 // tokens in `:root` (the alias snapshots the dark value). Apply them at :root.
 if (light) {
-  await page.addStyleTag({ content: readFileSync('/tmp/light-root.css', 'utf8') });
+  // dev.html defines its light set on `body.vscode-light`, but real VS Code puts
+  // theme variables on the document root — and a theme that aliases them in
+  // `:root` would otherwise snapshot the dark values. Lift them to :root.
+  const devHtml = readFileSync(resolve(import.meta.dirname, '..', 'dev.html'), 'utf8');
+  const lightVars = /body\.vscode-light\s*\{([\s\S]*?)\}/.exec(devHtml)?.[1] ?? '';
+  await page.addStyleTag({ content: `:root {${lightVars}}` });
 }
 // Drop the shipped stylesheet, install the candidate.
 await page.evaluate(() => {
