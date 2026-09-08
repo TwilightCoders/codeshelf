@@ -22,8 +22,12 @@ node_modules/**
 
 # Design/provenance docs and the dev workspace file aren't part of the product.
 docs/**
+CONTRIBUTING.md
 *.code-workspace
 media/icon.svg
+# README screenshots are resolved from the repository by the Marketplace,
+# so they don't need to ship inside the package.
+media/screenshots/**
 
 # Codicons ships previews, build scripts and per-icon SVGs; the webview only
 # <link>s the stylesheet and its font.

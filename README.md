@@ -1,59 +1,75 @@
 # CodeShelf
 
-A Steam Library-style project browser for VS Code. Point CodeShelf at the directories where your projects live and it renders them as a browsable wall of cards — grouped into shelves, with language badges, git branch, last-modified times, and optional generated poster art.
+**Every project you've ever built, one window away.**
 
-## Features
+Point CodeShelf at the folders where your code lives and it turns them into a browsable library — cards with language, branch, last-touched time and auto-generated keyword tags. Open a project, or find the one you half-remember, without digging through a file tree.
 
-- **Automatic project discovery** — scans your configured roots for projects, detecting them by well-known markers (`package.json`, `Cargo.toml`, `go.mod`, `Gemfile`, `pyproject.toml`, `.git`, and more).
-- **Shelves, booksets & super-projects** — top-level directories become shelves; nested groups become "booksets" (small ones roll up automatically, tunable via `booksetThreshold`). A directory that carries an *umbrella* marker (`docker-compose.yml`, `turbo.json`, `lerna.json`, `pnpm-workspace.yaml`, `nx.json`) is treated as a single "super-project" rather than recursed into — so a monorepo shows as one card, not a scattering of its packages.
-- **Cmd/Ctrl+K quick-switcher** — a command palette that searches every project across all roots and shelves; arrow keys navigate, Enter opens (its workspace if it has one).
-- **Multi-folder workspaces** — a directory containing a `.code-workspace` is surfaced as a bookset, and the card can open the whole workspace.
-- **Poster art** — generate minimal SVG posters per project with the Claude CLI (if installed), or attach your own image. Injected SVG is sanitized before display.
-- **Content search** — each project is indexed into a small searchable corpus so the header filter and the Cmd+K palette find a project by *what it is*, not just its name (Cmd+K shows a snippet of the matching text). The corpus is: the README excerpt, the project's `.claude/CONTEXT.md` if present, a description/keywords blurb from its package manifest, **and the distinctive vocabulary of its own source files** — nouns, adjectives, and custom terms (identifiers, names, jargon), with common verbs/adverbs/function words filtered out via a WordNet-derived denylist. The file walk honors each project's `.gitignore` (plus a built-in skip list), so build output and ignored files aren't indexed. README-less projects (Xcode/C++/etc.) still index via their source + `.claude/CONTEXT.md`.
-- **Auto keyword tags** — each project shows a few keyword chips, picked by **TF-IDF** over the indexed vocabulary: words that are frequent *here* but rare across your whole library rise to the top, so tags are distinctive (a neural-net project tags as `neuron`/`axon`/`synapse`, not `data`/`size`). The more projects you have, the sharper the tags. A project never tags itself with its own name, and programming-language keywords are filtered out using a denylist **harvested from VS Code's own bundled syntax grammars** (regenerate via `node scripts/derive-keywords.mjs`) — so `func`/`const`/`unsigned` never appear, while genuinely useful nouns (`table`, `schema`) are preserved.
-- **Three views** — **Shelves** (the folder-shaped default), **Workbench** (an "on the bench" strip of whatever you've touched in the last fortnight, above the shelves, with a heat edge on every card), and **Timeline** (the whole library laid out by age — Today, This week, This month, Months, This year, The deep past — with shelves dropped entirely). Your choice is remembered.
-- **Star, hide, search, sort** — pin favorites, hide noise, filter across all projects or within a shelf, and sort by recency, name, or language.
-- **Stale fade** — optionally dim projects you haven't touched in a while.
-- **Themed & accessible** — a tokenized design system that adapts to light and dark VS Code themes, with keyboard-operable cards, focus rings, and reduced-motion support.
-- **Git worktrees become a deck** — a project's worktrees aren't scattered as separate cards; they're collected onto the parent project, which renders as a stacked deck with a count badge and expands to list each worktree's branch (click to open it).
+![The shelf view](media/screenshots/shelves.png)
 
-## Commands
+## Why
 
-| Command | ID | Description |
-| --- | --- | --- |
-| Open CodeShelf | `codeshelf.open` | Open the shelf view |
-| Edit Settings (JSON) | `codeshelf.editSettings` | Jump to the `codeshelf.roots` setting |
-| Clear Cache | `codeshelf.clearCache` | Drop cached shelves and saved poster prompts |
-| Edit Cache | `codeshelf.editCache` | Open the cached shelf JSON for manual editing |
+A `~/code` folder that has been accumulating for a decade stops being navigable. Most of what is in there is finished, abandoned, or was a weekend. The handful you actually touch is buried among the rest, and the folder tree gives you no way to tell which is which — every directory looks equally alive.
 
-CodeShelf auto-opens only when you launch an **empty** VS Code window (no folder open); with a project already open it stays out of the way — use **Open CodeShelf** to summon it.
+CodeShelf reads that pile and makes it legible: what's warm, what's archived, what a project even *was*.
+
+## Three ways to look at it
+
+**Shelves** mirror your folders. Small shelves sit side by side instead of each claiming a whole row, and a large one shows a single row with the rest a click away.
+
+**Workbench** puts what you're actually working on in front: anything touched in the last fortnight gets a strip at the top with its description and a direct open button, and every card carries a heat edge from hot to frozen.
+
+![The workbench view](media/screenshots/workbench.png)
+
+**Timeline** drops folders entirely and lays the library out by age — Today, This week, This month, Months, This year, The deep past — newest at the top, sinking as it cools.
+
+![The timeline view](media/screenshots/timeline.png)
+
+## What it does
+
+**Finds your projects properly.** Discovery follows the **git repository boundary**: a directory that *is* a repo is one project, and the things inside it are its components. A directory whose *children* are repos is a category — a shelf. That one rule handles monorepos, nested groups and deeply-buried projects without depth limits or naming conventions. Where a folder is genuinely ambiguous, a one-line `.codeshelf` file settles it:
+
+```yaml
+kind: project    # or: category
+```
+
+**Searches by what a project is, not just its name.** Each project is indexed into a small corpus — a README excerpt, its `.claude/CONTEXT.md`, a description from its package manifest, and the distinctive vocabulary of its own source files. Search "raytracer" and find the project you named `weekend-3`. The file walk honours each project's `.gitignore`, so build output is never indexed.
+
+**Tags projects automatically.** Keyword chips are picked by TF-IDF across your whole library, so they're the words that make a project *distinctive* rather than the words every project shares. Language keywords are filtered out using a denylist harvested from VS Code's own syntax grammars, and a project never tags itself with its own name.
+
+**Collects git worktrees.** Worktrees don't scatter as duplicate cards — they collect onto the parent project as a stacked deck with a count, expanding to list each branch.
+
+**Gets out of the way.** Star what matters, hide what doesn't, fade what's gone stale. `Cmd/Ctrl+K` opens a palette that searches every project across every root, hidden ones included.
+
+## Getting started
+
+1. Install, then run **CodeShelf: Open** from the Command Palette.
+2. Click **Add root** and pick a folder that contains projects — `~/code`, `~/Developer`, wherever they live.
+3. That's it. Add as many roots as you like.
+
+CodeShelf opens automatically when you launch an **empty** VS Code window. With a folder already open it stays out of the way.
 
 ## Settings
 
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
-| `codeshelf.roots` | object | `{}` | Root directories to scan, keyed by absolute path (see below). |
-| `codeshelf.booksetThreshold` | number | `8` | Booksets with this many or fewer total projects are flattened into the shelf grid. |
-| `codeshelf.scanDepth` | number | `3` | Maximum directory depth to scan for projects. |
-| `codeshelf.openInNewWindow` | boolean | `false` | Open projects in a new window instead of the current one. |
+| `codeshelf.roots` | object | `{}` | Folders to scan, keyed by absolute path (`~` is expanded). |
+| `codeshelf.booksetThreshold` | number | `8` | Nested groups with this many projects or fewer are flattened into the shelf. |
+| `codeshelf.scanDepth` | number | `3` | How deep to look for projects. |
+| `codeshelf.openInNewWindow` | boolean | `false` | Open projects in a new window. |
 
-### `codeshelf.roots` schema
-
-Each root is keyed by its absolute path (a leading `~` is expanded to your home directory) and may carry a label, default visibility, and per-shelf / per-project overrides:
+Each root can carry a label and per-shelf or per-project overrides:
 
 ```jsonc
 {
   "codeshelf.roots": {
-    "~/Workspace": {
+    "~/code": {
       "label": "Work",
-      "defaultVisibility": "show-all",
       "shelves": {
         "Gems": {
           "name": "Ruby Gems",
           "starred": true,
-          "flatten": "auto",
           "projects": {
-            "glossary": { "starred": true, "description": "Translation toolkit" }
+            "invoicer": { "starred": true, "description": "Billing and PDF invoices" }
           }
         },
         "Archive": { "hidden": true }
@@ -63,23 +79,27 @@ Each root is keyed by its absolute path (a leading `~` is expanded to your home 
 }
 ```
 
-Shelves and projects can be keyed either by absolute path or by directory name. `flatten` accepts `auto` (use the threshold), `always` (force a flat grid), or `never` (always keep the bookset).
+Shelves and projects can be keyed by absolute path or by folder name. `flatten` accepts `auto`, `always` or `never`.
 
-## Development
+## Commands
 
-```bash
-npm install
-npm run compile        # type-check the host + bundle the webview (esbuild)
-npm run compile:check  # full type-check of host AND webview (no emit)
-npm run lint           # ESLint
-npm test               # vitest unit tests
-npm run test:browser   # puppeteer-driven webview render tests
-npm run test:all       # both suites
-npm run package        # build a .vsix with vsce
-```
+| Command | Description |
+| --- | --- |
+| **CodeShelf: Open** | Open the library |
+| **CodeShelf: Edit Settings (JSON)** | Jump to `codeshelf.roots` |
+| **CodeShelf: Clear Cache** | Drop cached shelves and saved poster prompts |
+| **CodeShelf: Edit Cache** | Open the cached shelf JSON |
 
-The extension host code lives in `src/` (TypeScript, compiled with `tsc`). The webview is a React 19 app in `src/webview/` bundled by esbuild into `out-webview/`. Pure, UI-independent logic is isolated in `src/webview/components/pure.ts` and `src/shared/` so it can be unit-tested without a DOM or the VS Code API.
+## Poster art
+
+Projects can carry generated SVG poster art — produced locally with the Claude CLI if you have it installed, or you can attach your own image. Injected SVG is sanitised (scripts, event handlers and `javascript:` URLs stripped) before it is ever rendered.
+
+## Privacy
+
+Scanning, indexing and tagging all happen on your machine — CodeShelf reads the folders you point it at, keeps its cache locally, and makes no network requests of its own.
+
+The one exception is opt-in: if you ask it to *generate* poster art, it runs the Claude CLI you already have installed, and that CLI talks to Anthropic. No poster generation, no outbound traffic.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

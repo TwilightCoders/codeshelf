@@ -39,7 +39,7 @@
     "commands": [
       {
         "command": "codeshelf.open",
-        "title": "Open CodeShelf",
+        "title": "Open",
         "category": "CodeShelf"
       },
       {
