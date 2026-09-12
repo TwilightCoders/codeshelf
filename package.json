@@ -200,8 +200,9 @@
     "test:watch": "vitest",
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "test:all": "vitest run && vitest run --config vitest.browser.config.ts",
-    "vscode:prepublish": "npm run compile",
-    "package": "vsce package"
+    "vscode:prepublish": "npm run compile && node scripts/check-privacy.mjs",
+    "package": "vsce package",
+    "check:privacy": "node scripts/check-privacy.mjs"
   },
   "devDependencies": {
     "@types/canvas-confetti": "^1.9.0",
