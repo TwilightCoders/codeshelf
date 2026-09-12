@@ -4,179 +4,158 @@ All notable changes to CodeShelf are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+0.2.0 is the first release published to the Marketplace. Earlier versions mark
+development milestones reconstructed from the project history; they were never
+published.
 
-### Added
-- **View modes — Shelves, Workbench and Timeline.** Folder structure records
-  where a project was filed; it says nothing about whether it is alive. With ~300
-  projects at a median staleness over a year, two lenses put time on the primary
-  axis instead. **Workbench** adds an "on the bench" strip of what is actually in
-  flight (anything touched within a fortnight, newest first) above the usual
-  shelves, each with its description and a direct open button, and gives every
-  card a heat edge from hot to frozen. **Timeline** drops shelves altogether and
-  lays the whole library out by age — Today / This week / This month / Months /
-  This year / The deep past — newest at the top, sinking as it cools. The chosen
-  lens survives a reload.
-- **Monorepo package count** — an umbrella-marked project (docker-compose, turbo,
-  lerna, nx, pnpm-workspace) shows how many sub-projects it contains. Counted
-  only for umbrella roots, since doing it for all 297 projects would cost a
-  readdir per child for no visible benefit.
-- **Content search** — each project is indexed into a small search corpus matched
-  by both the header filter and the Cmd/Ctrl+K palette (which shows a snippet of
-  the hit). Sources: a cleaned README excerpt, the project's `.claude/CONTEXT.md`,
-  a description/keywords blurb from its package manifest
-  (`package.json`/`composer.json`/`Cargo.toml`/`pyproject.toml`/gemspec), **and the
-  vocabulary of its own source files**. Source tokens are camel/snake-split and
-  reduced to nouns + adjectives + out-of-vocabulary "custom" terms by subtracting
-  a WordNet-derived "never-a-noun" denylist (verbs/adverbs/function words); the
-  file walk honors `SKIP_DIRS` + each project's `.gitignore` and is bounded
-  (texty extensions only, 50 files / 256KB per project). README-less projects
-  (Xcode/C++/etc.) still index via their source + `.claude/CONTEXT.md`.
-- **Auto keyword tags** — each project surfaces a few keyword chips chosen by
-  TF-IDF over its indexed vocabulary (term frequency ÷ how many projects contain
-  the term), so distinctive words win and ubiquitous ones (`def`/`data`/`end`)
-  drop out. Computed in one pass after the scan and sharpens as the library grows.
-  Tags exclude the project's own name (split on camelCase + `-_. `, so `TileMapper`
-  never tags itself `screen`/`door`).
-- **Programming-keyword filtering (dog-fooded from VS Code)** — source tokens are
-  additionally filtered against a keyword denylist harvested from VS Code's *own*
-  bundled TextMate grammars (`keyword`/`storage`/`constant.language` scopes across
-  ~80 languages), plus a small supplement for tokens the grammars bury in larger
-  patterns. So `func`/`const`/`unsigned`/`nil`/`iota` no longer leak into tags or
-  search, while the SQL grammar and built-in type scopes are deliberately excluded
-  (their "keywords" — `table`/`schema`/`view`/`index` — are useful project nouns).
-  Regenerate with `node scripts/derive-keywords.mjs`.
-  Both the header filter and the Cmd/Ctrl+K palette now match that corpus, not
-  just the project name; Cmd+K shows a snippet of the matching text. Indexing
-  happens during the scan (no extra `readdir`; one bounded `readFile` per
-  README/manifest) and ships in `project.searchText`.
-- **Git worktree decks** — a project's git worktrees (secondary checkouts whose
-  `.git` is a file pointing into the main repo's `.git/worktrees/`) are no longer
-  scattered as their own cards. They're collected onto the parent project, which
-  renders as a stacked "deck" with a count badge; the card expands to list each
-  worktree's branch and open it. Submodules (`.git/modules/`) are unaffected, and
-  worktrees whose main repo is outside the scanned roots are dropped, not shown.
-- **Cmd/Ctrl+K command palette** — a global quick-switcher that searches every
-  project across all roots and shelves (hidden ones included), with keyboard
-  navigation; Enter opens the project (its workspace if it has one).
-- **Super-project classification** — a directory carrying an "umbrella" marker
-  (`docker-compose.yml`/`.yaml`, `turbo.json`, `lerna.json`,
-  `pnpm-workspace.yaml`, `nx.json`) but no regular project marker is now treated
-  as one project card instead of being walked into as a shelf. Precedence:
-  regular markers > umbrella markers > recurse.
-- **Refreshed, tokenized theme**: a design-token system (spacing/type/motion
-  scales, elevation, `color-mix` surface tints) with proper **light-theme
-  support**, global `:focus-visible` rings, `prefers-reduced-motion` handling,
-  larger hit targets, native-feeling scrollbars, and a narrow-width layout.
-- **Accessibility**: project cards and collapse arrows are keyboard-operable
-  (`role`, `tabIndex`, Enter/Space, `aria-expanded`); modals are `role="dialog"`.
-- Filesystem integration tests for the directory scanner (shelf/loose rollup,
-  single-child collapse, git-worktree skipping, multi-folder workspace booksets,
-  super-project classification).
-- SVG sanitization for generated/attached posters: `<script>`, inline event
-  handlers, `<foreignObject>`, and `javascript:` URLs are stripped before the
-  markup is injected (defense-in-depth atop the webview CSP).
-- ESLint (flat config) + Prettier config, and `lint` / `format` npm scripts.
-- `@types/react`, `@types/react-dom`, and `@types/canvas-confetti` so the webview
-  is fully type-checked by `compile:check`.
-- This CHANGELOG and a project README.
+## [0.2.0]
+
+First public release (preview).
 
 ### Changed
-- **Directory classification is now the git-repository boundary**, replacing a
-  precedence chain of marker checks. Things versioned together are one project;
-  things versioned separately are independent — one cheap observable that yields
-  all three layer kinds at any depth: `project` (the dir IS a repo, so its
-  marker-bearing children are components), `category` (not a repo, its children
-  are projects → a shelf), `grouping` (projects live deeper → recurse; the roots
-  land here too). A monorepo with one `.git` is a super-project for free, so
-  umbrella markers are now just an explicit declaration. A project marker no
-  longer stops recursion on a directory that plainly holds 2+ independent
-  projects. New `classifyDirectory()` / `isProjectDir()` are exported and tested.
-- **A `.codeshelf` file (`kind: project` | `kind: category`) overrides inference**
-  at any directory — the escape hatch for what no structural signal can know
-  (two independent repos a human considers one product).
-- **Removed `ROLLUP_THRESHOLD`, `rollupItems`/`rollupShelf`, and single-child
-  collapse.** These were presentation hacks that renamed projects
-  (`Store/api`) and tipped small categories into a synthetic "Projects" heap,
-  which is what made placement feel arbitrary. A category is now a shelf at any
-  size; small ones render compact and sit side by side in the wrapping
-  `.root-shelves` row. Project names are never prefixed.
-- **Booksets render as actual groups again.** `collectProjects()` flattened every
-  bookset into one grid, so the whole `.bookset` stylesheet was dead code and
-  `flatten` had no visible effect at any setting. A bookset now renders as a
-  named group with a count badge; `codeshelf.booksetThreshold` finally means what
-  the README says (booksets at or under it flatten into the shelf grid), and
-  `flatten: 'never' | 'always'` force it either way.
-- **Each project appears exactly once.** A `.code-workspace` can list folders
-  anywhere on disk (platform's names `../Gems/widgets`, `../lib`,
-  `../../elsewhere/tool`), so a project could be shown both inside a
-  workspace bookset and at its real home. The repo boundary now outranks the
-  workspace-as-bookset heuristic — a directory that IS a project is one card —
-  and a final pass gives every path a single owner, preferring the shelf that
-  physically contains it.
-- The synthetic loose shelf is named "Loose Projects" when a real directory in
-  the same root is already called "Projects".
-- Activation is now `onStartupFinished` instead of `*`, and the shelf auto-opens
-  only in an empty window (no workspace folder open) rather than on every launch.
-- The directory scanner reads each directory once (one `readdir`, resolving
-  markers by set membership) instead of up to three `readdir`s + ~16 `access()`
-  probes per directory, with bounded concurrency.
-- The webview bundle is now minified in production builds (~660KB → ~230KB).
-- `ProjectCard` is memoized and the root grouping is `useMemo`-cached, so a
-  single poster load no longer re-renders (and re-parses the SVG of) every card.
-- Webview sort logic is unified in a single parameterized `sortProjects`, and the
-  poster-prompt preview is rendered from the shared prompt builder so it can't
-  drift from what is actually sent.
-- The whole codebase is free of `as` type assertions (`src/` and `test/`).
+- **Classification follows the git repository boundary.** A directory that is a
+  repo is one project and its contents are components; a directory whose
+  children are repos is a shelf; anything else is looked through. Monorepos,
+  nested groups and deeply buried projects need no depth limits or naming
+  conventions. A project marker such as a stray `Makefile` or a cosmetic
+  `.code-workspace` no longer hides the independent projects beneath it.
+- **A category is a shelf at any size.** Projects keep their own names instead
+  of being prefixed with their parent folder.
+- **Shelves take only the room they need.** Each shelf claims as many columns
+  as its cards or its own title row require, so small shelves share a row with
+  a grouping border, and the layout tracks the window width.
+- **A large shelf previews exactly its first row** and says how many more it
+  holds ("Show 12 more").
+- **Shelf controls stay visible** at a low-contrast rest state instead of
+  appearing only on hover.
+- **Rebuilt theme.** Surfaces are derived from the active VS Code theme's own
+  colours, so light and dark both render correctly; recency is set as an
+  aligned, scannable column.
+- **Keyword tags drop language keywords** (`end`, `nil`, `func`, `unsigned`…)
+  using a denylist harvested from VS Code's own syntax grammars, and a project
+  no longer tags itself with its own name.
+- **Poster generation runs isolated** from your own Claude settings, hooks and
+  MCP servers, confined to the project directory, and times out after two
+  minutes.
 
-### Fixed
-- **Shelves rendered every card as a thin sliver.** `.shelf-row-content` is a
-  grid with a capped height, and a grid item whose `overflow` isn't `visible`
-  (every `.project-card`) contributes a zero automatic minimum size — so the
-  track algorithm compressed all implicit rows to fit the cap. A 70-project
-  shelf drew 11px slivers of poster with all text clipped. Fixed with
-  `align-content: start` + `grid-auto-rows: max-content`; the cap was also
-  raised (a card with tag chips is ~270px, so the old 230px sliced the tags off
-  every card in every shelf).
-- **Large shelves silently hid projects.** The `has-overflow` fade hint was
-  never applied by any component and there was no expand control, so a shelf
-  showed one row and dropped the rest with no affordance. Now shows the fade
-  plus a **"Show all N" / "Show less"** toggle.
-- **Filtering a shelf made the whole section vanish.** A zero-match filter
-  returned `null` for the entire section — including the filter input being
-  typed into — leaving no way to clear it. Now the shelf keeps its header and
-  shows an empty state with a "Clear filter" button. Additionally the global
-  header search no longer silently overrides a per-shelf filter (they were
-  sharing one variable); the two narrow independently.
-- **Small shelves stacked their cards vertically and clipped them.** A
-  `shelf-compact` shelf (≤3 projects) shrink-wraps so several can sit side by
-  side, but its inner grid kept auto-fill columns and collapsed to one column.
-- **A lone `*.code-workspace` swallowed whole categories.** The file is a
-  `GLOB_MARKER`, so a folder carrying only a cosmetic workspace file (e.g.
-  `{folders:[{path:"."}], settings:{"window.title":"🎮 Games"}}`) was treated
-  as one project and never recursed into — hiding ~31 real projects across six
-  directories, including `Games/`'s six games and `vscode/` itself. It is now
-  a weak signal: if it is the only marker and the directory holds 2+ projects,
-  the directory is a collection. Dirs with any other marker are unaffected.
-- **Keyword tags were not searchable.** Tags render as chips on every card but
-  `projectMatchesQuery` only checked name + corpus, so searching a tag you could
-  see returned nothing. Tags are now matched, and the shelf-detail modal uses the
-  same matcher as the header, palette, and per-shelf filter (it was name-only).
-- The open project-detail modal now re-derives from the latest scan instead of
-  showing a stale open-time snapshot.
-- Confetti bursts cancel their pending staggered timers on rescan/unmount.
-- Both message-protocol switches have compile-time exhaustiveness guards, so a
-  renamed/added variant can no longer be dropped silently.
-- React 19 `useRef` call that compiled only because React types were missing.
-- Leaked `editCache` document listeners are now registered on the extension's
-  subscriptions.
+### Added
+- **Workbench view** — an "on the bench" strip of projects touched in the last
+  fortnight, with descriptions and a direct open button, and a heat edge on
+  every card from hot to frozen.
+- **Timeline view** — the library stratified by age: Today, This week, This
+  month, Months, This year, The deep past.
+- The chosen view is remembered.
+- **Language filter chips** across all views, including a chip for projects
+  with no detected language.
+- **Git worktrees** collect onto their parent project as a stacked deck.
+- **`.codeshelf` override** — a one-line `kind: project` or `kind: category`
+  file settles any folder that is genuinely ambiguous.
+- **Monorepo badge** showing how many packages an umbrella-marked project
+  contains.
+- Marketplace listing: icon, licence, repository links.
 
 ### Removed
-- Dead `project:showDetail` and `item:editMeta` message types (and the unused
-  `item:editMeta` handler).
+- The small-group rollup, single-child folder collapsing and the synthetic
+  heap they fed. They made placement feel arbitrary.
 
-## [0.1.0]
+### Fixed
+- Poster generation never returned: the Claude CLI was left waiting on input.
+- Cancelling a poster now stops every process it started and no longer reports
+  an error.
+- Un-starring or un-hiding a project or shelf failed to save.
+- Cards in shelves with many rows were squeezed into thin slivers.
+- Large shelves silently hid most of their projects with no way to expand.
+- A per-shelf filter with no matches removed the whole shelf, including the
+  filter box, so it could not be cleared.
+- The header search overrode per-shelf filters; they now narrow independently.
+- Tags shown on cards were not searchable, and the shelf detail view matched
+  names only.
+- Booksets rendered as a flat grid instead of named groups.
+- The packaged extension shipped 650 files (1.52 MB) of dependency previews and
+  source maps; it is now 36 files (about 250 KB).
 
-- Initial CodeShelf: project discovery across configured roots, shelves and
-  booksets, poster generation/attachment, star/hide/search/sort, stale fade,
-  and multi-folder workspace support.
+## [0.1.4] - 2026-06-04
+
+### Added
+- **Content search.** Each project is indexed from its README, its
+  `.claude/CONTEXT.md`, its package manifest description and keywords, and the
+  vocabulary of its own source files. The file walk is bounded and honours
+  `.gitignore`. The header filter and the palette both match it, and the palette
+  shows a snippet of why a project matched.
+- **Keyword tags** chosen by TF-IDF across the whole library, so they are the
+  words that make a project distinctive, shown as chips on each card.
+
+## [0.1.3] - 2026-06-02
+
+### Added
+- **Cmd/Ctrl+K palette** searching every project across every root, hidden
+  ones included, fully keyboard driven.
+- **Super-projects.** A folder carrying an umbrella marker (`docker-compose.yml`,
+  `turbo.json`, `lerna.json`, `pnpm-workspace.yaml`, `nx.json`) opens as one
+  project rather than being split into a shelf.
+
+### Changed
+- Design-token theme with visible focus rings, reduced-motion support and
+  keyboard-operable cards, collapse controls and dialogs.
+- Faster scans (one directory read per folder) and a minified webview bundle.
+- A poster arriving re-renders only its own card.
+
+### Fixed
+- Light themes rendered with hard-coded dark tints.
+- Starring or hiding the loose projects shelf had no effect.
+
+## [0.1.2] - 2026-05-25
+
+### Added
+- **CodeShelf: Clear Cache** and **CodeShelf: Edit Cache** commands.
+- Staggered card entrance, and a celebration when a rescan finds new projects.
+
+### Changed
+- Activates after startup instead of on every event, and opens automatically
+  only in an empty window.
+- Scans read sibling folders concurrently, with a bound on open file operations.
+
+### Security
+- Poster SVG is sanitised before it is rendered: scripts, event handlers,
+  `<foreignObject>` and `javascript:` URLs are stripped.
+
+### Fixed
+- Icons were missing from the packaged extension.
+
+## [0.1.1] - 2026-03-30
+
+### Added
+- **Shelf detail view** with its own filter, and an inline filter on each shelf
+  row.
+- **Sort** by recent, name or language, and an optional **stale fade** that dims
+  projects by age.
+- **Multi-folder `.code-workspace` files** become a group of projects.
+- Star, hide and reveal buttons on shelves.
+
+### Changed
+- The webview was rewritten in React.
+- Shelves preview a single row.
+- Git worktrees are no longer listed as separate projects.
+
+### Fixed
+- Unhiding a small shelf immediately folded it back into the loose projects row.
+
+## [0.1.0] - 2026-03-29
+
+First working version.
+
+### Added
+- **Project library** in an editor tab: configured root folders are scanned for
+  projects by marker files and grouped into shelves and booksets, under
+  collapsible root headers. Results are cached for instant display and refreshed
+  in the background.
+- **Star and hide** for shelves and projects, stored in `codeshelf.roots`, with
+  hidden shelves shown as pills for a quick unhide.
+- **Booksets** at or under `codeshelf.booksetThreshold` projects flatten into
+  their shelf, with a per-shelf `flatten` override.
+- **Project detail view** with its git branch, language and last change.
+- **Poster art.** Generate an SVG poster for a project with the Claude CLI,
+  optionally guided by your own prompt (remembered per project), or attach your
+  own image. Generation can be cancelled, and the CLI may read the project but
+  not change it.
+- Opens `.code-workspace` files instead of bare folders where one exists.
