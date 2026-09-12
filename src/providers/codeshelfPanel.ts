@@ -5,7 +5,7 @@ import { ExtToWebview, WebviewToExt, Shelf, ScanDiff, Project } from '../shared/
 import { STORAGE_KEYS } from '../shared/constants';
 import { scanRoots } from '../services/projectScanner';
 import { detectCapabilities } from '../services/capabilities';
-import { PosterGenerator, posterCachePath } from '../services/posterGenerator';
+import { PosterGenerator, PosterCancelledError, posterCachePath } from '../services/posterGenerator';
 import { renderWebviewHtml } from './htmlTemplate';
 import { getConfig, addRoot, updateItemMeta } from './config';
 import { transformSvg } from '../services/svgEmbed';
@@ -262,6 +262,8 @@ export class CodeShelfPanel {
       prompts[projectPath] = userNotes || '';
       await this.context.globalState.update(CodeShelfPanel.PROMPTS_KEY, prompts);
     } catch (err: unknown) {
+      // The user stopped it; poster:cancel has already cleared the forge state.
+      if (err instanceof PosterCancelledError) return;
       const msg = err instanceof Error ? err.message : String(err);
       vscode.window.showErrorMessage(`CodeShelf: Failed to generate poster — ${msg}`);
       // Clear the forge animation

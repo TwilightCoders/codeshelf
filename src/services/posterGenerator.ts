@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { execFile } from 'child_process';
+import { spawn, type ChildProcess } from 'child_process';
 import { Project } from '../shared/types';
 import { POSTER_SYSTEM_PROMPT, POSTER_ALLOWED_TOOLS, buildPosterPrompt } from '../shared/constants';
 import { Capabilities } from './capabilities';
@@ -34,13 +34,57 @@ export function posterCachePath(cacheDir: string, projectPath: string, ext = '.s
   return path.join(cacheDir, 'posters', `${hash}${ext}`);
 }
 
+/**
+ * Arguments for a one-shot poster run of the Claude CLI.
+ *
+ * `--restricted --strict-mcp-config` is load-bearing, not hardening for its own
+ * sake. In `-p` mode the CLI otherwise loads the user's own settings — hooks
+ * included — and a hook that runs at session end keeps the process alive after
+ * it has printed its answer. The extension then waits until its timeout kills
+ * the run and reports a failure, with a perfectly good SVG discarded. Skipping
+ * settings and MCP servers also means generating a poster never fires the
+ * user's hooks, and confines the file tools to the project directory.
+ */
+export function buildClaudeArgs(prompt: string): string[] {
+  return [
+    '-p', prompt,
+    '--output-format', 'text',
+    '--max-turns', '5',
+    '--system-prompt', POSTER_SYSTEM_PROMPT,
+    '--restricted', '--strict-mcp-config', '--no-session-persistence',
+    '--allowedTools', ...POSTER_ALLOWED_TOOLS,
+  ];
+}
+
+/**
+ * Environment for the child CLI. Drops the markers a parent Claude Code session
+ * leaves behind, which would make the child refuse to start as a nested session
+ * when VS Code itself was launched from one.
+ */
+export function buildChildEnv(parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env = { ...parent };
+  for (const key of Object.keys(env)) {
+    if (key === 'CLAUDECODE' || key.startsWith('CLAUDE_CODE_')) delete env[key];
+  }
+  return env;
+}
+
+/** Thrown when a run is stopped by the user — not a failure, so never surfaced. */
+export class PosterCancelledError extends Error {
+  constructor() { super('Poster generation cancelled'); this.name = 'PosterCancelledError'; }
+}
+
+const GENERATION_TIMEOUT_MS = 120_000;
+const MAX_OUTPUT_BYTES = 512 * 1024;
+
 type PosterCallback = (result: PosterResult) => void;
 
 export class PosterGenerator {
   private cacheDir: string;
   private capabilities: Capabilities;
   private onPoster: PosterCallback;
-  private activeProcess: ReturnType<typeof execFile> | null = null;
+  private activeProcess: ChildProcess | null = null;
+  private abortActive: ((reason: Error) => void) | null = null;
 
   constructor(
     context: vscode.ExtensionContext,
@@ -77,10 +121,7 @@ export class PosterGenerator {
   }
 
   public cancel() {
-    if (this.activeProcess) {
-      this.activeProcess.kill();
-      this.activeProcess = null;
-    }
+    this.abortActive?.(new PosterCancelledError());
   }
 
   public get isGenerating(): boolean {
@@ -121,21 +162,59 @@ export class PosterGenerator {
 
     try {
       const stdout = await new Promise<string>((resolve, reject) => {
-        this.activeProcess = execFile(
-          this.capabilities.claudeCliPath!,
-          ['-p', fullPrompt, '--output-format', 'text', '--max-turns', '5', '--system-prompt', POSTER_SYSTEM_PROMPT, '--allowedTools', ...POSTER_ALLOWED_TOOLS],
-          {
-            timeout: 120000,
-            maxBuffer: 1024 * 512,
-            cwd: cwd ?? undefined,
-            env: { ...process.env },
-          },
-          (err, stdout) => {
-            this.activeProcess = null;
-            if (err) reject(err);
-            else resolve(stdout);
-          },
-        );
+        // stdin MUST be closed: with an open pipe the CLI waits for piped input
+        // and never produces output at all. `detached` puts the CLI in its own
+        // process group so stopping it also stops anything it started (ripgrep
+        // behind the Grep tool, say); otherwise an orphan keeps stdout open and
+        // neither a cancel nor the timeout could ever end the run.
+        const child = spawn(this.capabilities.claudeCliPath!, buildClaudeArgs(fullPrompt), {
+          cwd: cwd ?? undefined,
+          env: buildChildEnv(process.env),
+          stdio: ['ignore', 'pipe', 'pipe'],
+          detached: process.platform !== 'win32',
+        });
+        this.activeProcess = child;
+
+        let settled = false;
+        const finish = (fn: () => void) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          this.activeProcess = null;
+          this.abortActive = null;
+          fn();
+        };
+        const killTree = () => {
+          try {
+            if (child.pid && process.platform !== 'win32') process.kill(-child.pid, 'SIGTERM');
+            else child.kill();
+          } catch {
+            child.kill();
+          }
+        };
+        // Settle at once rather than waiting for 'close': 'close' waits on every
+        // holder of the pipes, which is exactly what a stuck grandchild prevents.
+        this.abortActive = reason => { killTree(); finish(() => reject(reason)); };
+
+        let out = '';
+        let err = '';
+        child.stdout?.on('data', (chunk: Buffer) => {
+          out += chunk.toString();
+          if (out.length > MAX_OUTPUT_BYTES) this.abortActive?.(new Error('output exceeded limit'));
+        });
+        child.stderr?.on('data', (chunk: Buffer) => { err += chunk.toString(); });
+
+        const timer = setTimeout(() => {
+          // A complete SVG already printed is a success even if the CLI lingers.
+          if (extractSvg(out)) { killTree(); finish(() => resolve(out)); return; }
+          this.abortActive?.(new Error(`timed out after ${GENERATION_TIMEOUT_MS / 1000}s`));
+        }, GENERATION_TIMEOUT_MS);
+
+        child.on('error', e => finish(() => reject(e)));
+        child.on('close', code => finish(() => {
+          if (code === 0 || extractSvg(out)) resolve(out);
+          else reject(new Error(`exited ${code}${err.trim() ? `: ${err.trim().slice(0, 200)}` : ''}`));
+        }));
       });
 
       const svg = extractSvg(stdout);
@@ -143,6 +222,7 @@ export class PosterGenerator {
       const out = stdout.trim();
       throw new Error(`Claude returned non-SVG output (${out.length} chars, starts with: ${out.slice(0, 80)}...)`);
     } catch (err: unknown) {
+      if (err instanceof PosterCancelledError) throw err;
       if (err instanceof Error && err.message.startsWith('Claude returned')) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`Claude CLI error: ${msg}`);
