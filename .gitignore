@@ -6,3 +6,6 @@ node_modules/
 test/browser/screenshots/
 .Codex/
 startpage.code-workspace
+
+# Agent context and journals are local to a machine, never part of the repo.
+.claude/

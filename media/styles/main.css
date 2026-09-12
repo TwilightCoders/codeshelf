@@ -3,7 +3,8 @@
    --------------------------------------------------------------------------
    DESIGN RATIONALE
 
-   The library is ~300 projects, of which ~39 are alive. The sheet is therefore
+   A long-lived library is mostly dormant: a few projects are alive among
+   hundreds that are not. The sheet is therefore
    built around one idea: THE PAGE IS QUIET AND THE LIVE THINGS ARE LOUD.
 
    1. Ink, not chrome. Every surface is derived from the host theme by mixing
@@ -1048,7 +1049,7 @@ button {
 .card-branch .codicon { font-size: 10px; flex: 0 0 auto; }
 
 /* The recency read. Right-aligned + tabular so a column of them scans
-   vertically — this is how you find the 39 live projects in 297. */
+   vertically — this is how the few live projects stand out from the rest. */
 .card-time {
   margin-left: auto;
   flex: 0 0 auto;
@@ -1180,7 +1181,7 @@ button {
   50%      { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 6%, transparent), var(--shadow-2); }
 }
 
-/* First-paint stagger. Delay is capped so a 297-card library still settles
+/* First-paint stagger. Delay is capped so a library of hundreds still settles
    in well under a second (App.tsx only uses its own constant for cleanup). */
 .project-card.stagger-in {
   animation: cs-rise 340ms var(--ease) both;
@@ -1844,7 +1845,7 @@ kbd {
 /* ==========================================================================
    VIEW MODES — Workbench & Timeline
    Folder structure records where a project was filed; it says nothing about
-   whether it is alive. With ~300 projects at a median staleness over a year,
+   whether it is alive. In a library where most projects are long cold,
    these two lenses put time on the primary axis instead.
    ========================================================================== */
 
@@ -2048,7 +2049,7 @@ kbd {
 
 .tl-items {
   display: grid;
-  /* Wide enough that a real project name — task_queue-redis — fits
+  /* Wide enough that a long, real-world project name fits
      without an ellipsis. Names are the only thing being scanned here. */
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: var(--s2) var(--s4);
@@ -2103,7 +2104,7 @@ kbd {
 }
 
 /* Wide enough to afford a branch column. The name always wins the space: it is
-   the only thing you actually scan for, and "task_queue-re" helps nobody. */
+   the only thing you actually scan for, and a truncated "task_queue-re" helps nobody. */
 @media (min-width: 1500px) {
   .tl-item { grid-template-columns: 22px minmax(0, 1fr) minmax(0, 11ch) 58px; }
   .tl-meta {
@@ -2144,8 +2145,8 @@ kbd {
 .bench-meta .bench-branch { max-width: 16ch; }
 
 /* — Language filter chips ——————————————————————————————————————
-   A quick axis across the whole library: 137 of these projects are Ruby and 68
-   have no detected language at all, so "no language" is a chip in its own right
+   A quick axis across the whole library. Plenty of projects have no detected
+   language at all, so "no language" is a chip in its own right
    rather than an unfilterable gap. Chips subtract — everything is on until you
    switch something off — which keeps the default view complete. */
 

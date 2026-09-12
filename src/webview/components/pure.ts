@@ -117,8 +117,8 @@ export function sortProjects(projects: Project[], sortBy: SortBy = 'date'): Proj
 
 // ── Heat & age bands ──
 //
-// The library is 297 projects of which ~39 were touched in the last 90 days and
-// the median is over a year cold. Age is therefore the most useful single signal
+// A long-lived library is mostly cold: a handful of projects are touched in any
+// given month and the rest sit untouched for years. Age is therefore the most useful single signal
 // there is, and both the Workbench and Timeline views are built on it.
 
 const DAY = 86_400_000;
@@ -176,7 +176,7 @@ export function groupByAge<T extends { lastModified: number }>(
 
 // ── Language filtering ──
 
-/** The key a project filters under. 68 of ~300 have no detected language, so
+/** The key a project filters under. Many projects have no detected language, so
  *  "no language" has to be a first-class chip rather than an unfilterable gap. */
 export const NO_LANGUAGE = '—';
 export const langKey = (p: Project) => p.primaryLanguage ?? NO_LANGUAGE;

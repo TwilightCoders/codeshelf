@@ -9,7 +9,7 @@ interface Props {
 /**
  * "On the bench" — the handful of projects actually in flight.
  *
- * Of ~300 projects roughly a dozen are warm at any time, so the shelves below
+ * In a large library only a handful are warm at any time, so the shelves below
  * are mostly an archive. This strip answers "what am I working on?" without
  * scrolling, and is the one place a project gets room for its description and a
  * direct open button.

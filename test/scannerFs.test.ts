@@ -111,7 +111,7 @@ beforeAll(async () => {
   await fs.promises.writeFile(path.join(solows, 'soloWs.code-workspace'), JSON.stringify({ folders: [{ path: '.' }] }));
   await fs.promises.writeFile(path.join(solows, 'package.json'), '{}');
 
-  // A repo that CONTAINS component dirs with their own markers (the platform
+  // A repo that CONTAINS component dirs with their own markers (the monorepo
   // shape). The git boundary says one project, so the components are not cards.
   superRepo = path.join(root1, 'superRepo');
   await fs.promises.mkdir(path.join(superRepo, '.git'), { recursive: true });
@@ -306,7 +306,7 @@ describe('scanRoots (filesystem)', () => {
 
   it('recurses into a category whose only marker is a self-referential .code-workspace', async () => {
     // Regression: a lone *.code-workspace matched GLOB_MARKERS and stopped
-    // recursion, collapsing six real projects into one opaque card (Games),
+    // recursion, collapsing six real projects into one opaque card (a games folder),
     // and hid `vscode/` — ~31 projects invisible across the real library.
     const shelves = await scanRoots({ [root1]: {} }, 3);
     const all = shelves.flatMap(s => s.items).flatMap(i => i.kind === 'project' ? [i.project] : i.projects);

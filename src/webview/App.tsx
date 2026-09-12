@@ -12,10 +12,15 @@ import { ShelfDetailModal } from './components/ShelfDetailModal';
 import { ProjectDetailModal } from './components/ProjectDetailModal';
 import { CommandPalette, type ProjectEntry } from './components/CommandPalette';
 
+/** Narrow the webview's persisted state (typed `unknown` by the API) to a record. */
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
 // ── Timing constants (ms) ──
 
-// The stylesheet clamps the per-card entrance delay (it cannot afford to run a
-// 297-card ramp), so cleanup is bounded to match. Multiplying the step by the
+// The stylesheet clamps the per-card entrance delay (it cannot afford a ramp
+// across hundreds of cards), so cleanup is bounded to match. Multiplying the step by the
 // full card count meant holding .stagger-in plus an inline --stagger-i on every
 // card for ~24 seconds after the library had finished animating.
 const BENCH_MAX = 6;          // the bench is a glance, not another grid
@@ -48,16 +53,18 @@ function App() {
   const [staleFade, setStaleFade] = useState(false);
   // The lens survives a reload — losing it on every rescan would be irritating.
   const [view, setView] = useState<ViewMode>(() => {
-    const saved = (vscode.getState() as { view?: string } | null)?.view;
+    const state = vscode.getState();
+    const saved = isRecord(state) ? state.view : undefined;
     return saved === 'workbench' || saved === 'timeline' ? saved : 'shelves';
   });
   const [excludedLangs, setExcludedLangs] = useState<Set<string>>(() => {
-    const saved = (vscode.getState() as { excludedLangs?: unknown } | null)?.excludedLangs;
+    const state = vscode.getState();
+    const saved = isRecord(state) ? state.excludedLangs : undefined;
     return new Set(Array.isArray(saved) ? saved.filter((x): x is string => typeof x === 'string') : []);
   });
   const persist = useCallback((patch: Record<string, unknown>) => {
-    const prev = (vscode.getState() as Record<string, unknown> | null) ?? {};
-    vscode.setState({ ...prev, ...patch });
+    const prev = vscode.getState();
+    vscode.setState({ ...(isRecord(prev) ? prev : {}), ...patch });
   }, []);
   const toggleLang = useCallback((lang: string) => {
     setExcludedLangs(prev => {

@@ -11,7 +11,7 @@ interface Props {
  * newest at the top, sinking into the deep past as it cools.
  *
  * Folder structure says where a project was filed; it says nothing about whether
- * it is alive. With a median staleness over a year, time is the axis that
+ * it is alive. When most projects are long cold, time is the axis that
  * actually separates the handful of live projects from the archive — so this view
  * drops shelves entirely and sorts the whole library by age.
  */

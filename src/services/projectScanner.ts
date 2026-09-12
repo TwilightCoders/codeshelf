@@ -126,11 +126,11 @@ async function detectMarkers(dir: string, entries?: string[]): Promise<string[]>
  *
  *   project   — the directory IS a repo (or declares itself one). Its
  *               marker-bearing children are components, so we do not recurse.
- *               `platform/` (one repo, 13 component dirs) is one card.
+ *               `platform/` (one repo holding `api/`, `web/`, `worker/`) is one card.
  *   category  — not a repo, but its children ARE projects. A shelf.
- *               `vscode/`, `Gems/`, `Games/` (independent repos side by side).
+ *               `gems/`, `apps/` (independent repos side by side).
  *   grouping  — not a repo and no project children, but projects live deeper.
- *               Recurse. `Plugins/`, `Archive/`, and the roots themselves.
+ *               Recurse. `archive/2019/`, and the roots themselves.
  *
  * This subsumes machinery that used to be special-cased: a monorepo with one
  * `.git` is a super-project for free, so umbrella markers become a mere
@@ -153,7 +153,8 @@ async function readDeclaration(dir: string, entryNames: string[]): Promise<DirKi
   if (!entryNames.includes('.codeshelf')) return undefined;
   const raw = await fs.promises.readFile(path.join(dir, '.codeshelf'), 'utf-8').catch(() => '');
   const m = /^\s*kind\s*:\s*(project|category)\s*$/mi.exec(raw);
-  return m ? (m[1].toLowerCase() as DirKind) : undefined;
+  if (!m) return undefined;
+  return m[1].toLowerCase() === 'project' ? 'project' : 'category';
 }
 
 /** Cheap, NON-recursive "does this look like a project at all?" — used to count
@@ -268,8 +269,8 @@ async function buildProject(
   ]);
   const gitBranch = markers.includes('.git') ? await getBranch(dir) : undefined;
 
-  // Only umbrella-marked projects get a package count. Counting children for all
-  // 297 projects would mean a readdir per child for no visible benefit; a
+  // Only umbrella-marked projects get a package count. Counting children for
+  // every project would mean a readdir per child for no visible benefit; a
   // docker-compose/turbo/lerna root is exactly the case the badge is for.
   const names = entryNames ?? [];
   const subProjectCount = detectUmbrellaMarkers(names).length > 0
@@ -393,8 +394,8 @@ async function scanDirectory(
     if (currentDepth < maxDepth) {
       // Category or grouping → recurse. A nested category becomes a bookset in
       // the parent shelf; names are NOT prefixed (the shelf/bookset already
-      // carries the context, and prefixing produced things like
-      // "Harbor-worktrees/agent-a3c09…").
+      // carries the context, and prefixing produced long composite names like
+      // "app-worktrees/agent-3f9c…").
       const nested = await scanDirectory(subdir, maxDepth, shelfMeta, collector, currentDepth + 1);
       if (nested.projects.length > 0 || nested.groups.length > 0) {
         const allProjects = [...nested.projects, ...nested.groups.flatMap(g => g.projects)];
@@ -415,8 +416,8 @@ async function scanDirectory(
 /**
  * Guarantee each project appears exactly once across all shelves.
  *
- * A `.code-workspace` may list folders living anywhere on disk — platform's
- * names `../Gems/widgets`, `../lib` and `../../elsewhere/tool` — so a
+ * A `.code-workspace` may list folders living anywhere on disk (`../lib`,
+ * `../../elsewhere/tool`), so a
  * project surfaced as part of a workspace bookset can also be discovered in its
  * real home. Ownership goes to the shelf that physically contains the project;
  * anything left over falls to its first occurrence.
@@ -500,7 +501,7 @@ export async function scanRoots(
       // directory that IS a project is one card, full stop. Otherwise a repo
       // shipping a multi-folder `.code-workspace` would be exploded into a
       // bookset of whatever that file happens to list — including paths outside
-      // the tree (platform's lists `../Gems/widgets` and `../../elsewhere/…`),
+      // the tree (`../lib`, `../../elsewhere/tool`),
       // which duplicates projects discovered in their real home.
       if (await isProjectDir(topDir.path, topEntryNames)) {
         const topMarkers = await detectMarkers(topDir.path, topEntryNames);
@@ -587,8 +588,8 @@ export async function scanRoots(
       // The synthetic "Projects" shelf is addressable for star/hide too — its
       // path is the root itself, so resolve meta keyed by the root's basename.
       const looseMeta = resolveShelfMeta(expandedRoot, rootConfig);
-      // A real directory can also be called "Projects" (a typical workspace has
-      // one), which would put two identically-titled shelves in the same root.
+      // A real directory can also be called "Projects", which would put two
+      // identically-titled shelves in the same root.
       const takenNames = new Set(shelves.filter(sh => sh.rootPath === expandedRoot).map(sh => sh.name));
       const looseName = takenNames.has('Projects') ? 'Loose Projects' : 'Projects';
       shelves.push({
