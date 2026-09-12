@@ -112,9 +112,23 @@ export function applyItemMeta(
 }
 
 /** Add a root to `codeshelf.roots` if absent. Returns true if it was added. */
+/**
+ * `codeshelf.roots` as a plain, mutable copy.
+ *
+ * VS Code returns configuration values as read-only proxies. Adding keys to one
+ * happens to work, but deleting throws ("'isExtensible' on proxy: trap result
+ * does not reflect extensibility") — which is exactly what un-starring or
+ * un-hiding does, so those toggles silently failed in a real extension host
+ * while passing every test that used a plain object. Always edit a copy.
+ */
+function readRoots(config: vscode.WorkspaceConfiguration): RootsConfig {
+  const copy: RootsConfig = JSON.parse(JSON.stringify(config.get<RootsConfig>('roots', {})));
+  return copy;
+}
+
 export async function addRoot(rootPath: string): Promise<boolean> {
   const config = vscode.workspace.getConfiguration('codeshelf');
-  const roots = config.get<RootsConfig>('roots', {});
+  const roots = readRoots(config);
   if (roots[rootPath]) return false;
   roots[rootPath] = {};
   await config.update('roots', roots, vscode.ConfigurationTarget.Global);
@@ -129,7 +143,7 @@ export async function updateItemMeta(
   updates: ItemMetaUpdate,
 ): Promise<void> {
   const config = vscode.workspace.getConfiguration('codeshelf');
-  const roots = config.get<RootsConfig>('roots', {});
+  const roots = readRoots(config);
   applyItemMeta(roots, rootPath, itemPath, kind, updates, process.env.HOME);
   await config.update('roots', roots, vscode.ConfigurationTarget.Global);
 }
